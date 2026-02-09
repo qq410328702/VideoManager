@@ -1,0 +1,412 @@
+<UserControl x:Class="VideoManager.Views.VideoListView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:md="http://materialdesigninxaml.net/winfx/xaml/themes"
+             xmlns:vm="clr-namespace:VideoManager.ViewModels"
+             mc:Ignorable="d"
+             d:DesignHeight="600" d:DesignWidth="800"
+             d:DataContext="{d:DesignInstance Type=vm:VideoListViewModel, IsDesignTimeCreatable=False}">
+
+    <UserControl.Resources>
+        <!-- Converter to format TimeSpan Duration for display -->
+        <local:DurationFormatConverter x:Key="DurationFormatConverter"
+                                       xmlns:local="clr-namespace:VideoManager.Views"/>
+        <!-- Converter to format file size for display -->
+        <local:FileSizeFormatConverter x:Key="FileSizeFormatConverter"
+                                       xmlns:local="clr-namespace:VideoManager.Views"/>
+        <!-- BoolToVisibility for file missing indicator -->
+        <BooleanToVisibilityConverter x:Key="BoolToVisConverter"/>
+        <!-- Color converters for tag display -->
+        <local:ColorToSolidBrushConverter x:Key="ColorToSolidBrushConverter"
+                                          xmlns:local="clr-namespace:VideoManager.Views"/>
+        <local:ColorToForegroundConverter x:Key="ColorToForegroundConverter"
+                                          xmlns:local="clr-namespace:VideoManager.Views"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <!-- Batch operation toolbar (visible when multiple items selected) -->
+            <RowDefinition Height="Auto"/>
+            <!-- Video list -->
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- ==================== Batch Operation Toolbar ==================== -->
+        <Border Grid.Row="0"
+                Background="{DynamicResource PrimaryHueLightBrush}"
+                Padding="8,6"
+                Visibility="{Binding HasMultipleSelection, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Selection info -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <md:PackIcon Kind="CheckboxMultipleMarked"
+                                 Width="18" Height="18"
+                                 VerticalAlignment="Center"
+                                 Margin="0,0,6,0"/>
+                    <TextBlock Text="{Binding SelectionInfoText}"
+                               VerticalAlignment="Center"
+                               FontSize="13"
+                               FontWeight="Medium"/>
+                </StackPanel>
+
+                <!-- Batch operation buttons -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <!-- Batch Tag button -->
+                    <Button x:Name="BatchTagButton"
+                            Click="BatchTagButton_Click"
+                            Style="{StaticResource MaterialDesignOutlinedButton}"
+                            Margin="0,0,4,0"
+                            Padding="8,4"
+                            Height="32"
+                            ToolTip="批量添加标签">
+                        <StackPanel Orientation="Horizontal">
+                            <md:PackIcon Kind="TagMultiple" Width="16" Height="16"
+                                         VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBlock Text="批量标签" VerticalAlignment="Center" FontSize="12"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Batch Category button -->
+                    <Button x:Name="BatchCategoryButton"
+                            Click="BatchCategoryButton_Click"
+                            Style="{StaticResource MaterialDesignOutlinedButton}"
+                            Margin="0,0,4,0"
+                            Padding="8,4"
+                            Height="32"
+                            ToolTip="批量移动到分类">
+                        <StackPanel Orientation="Horizontal">
+                            <md:PackIcon Kind="FolderMove" Width="16" Height="16"
+                                         VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBlock Text="批量分类" VerticalAlignment="Center" FontSize="12"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Batch Delete button -->
+                    <Button x:Name="BatchDeleteButton"
+                            Click="BatchDeleteButton_Click"
+                            Style="{StaticResource MaterialDesignOutlinedButton}"
+                            Margin="0,0,4,0"
+                            Padding="8,4"
+                            Height="32"
+                            ToolTip="批量删除视频"
+                            Foreground="#EF5350"
+                            BorderBrush="#EF5350">
+                        <StackPanel Orientation="Horizontal">
+                            <md:PackIcon Kind="DeleteSweep" Width="16" Height="16"
+                                         VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <TextBlock Text="批量删除" VerticalAlignment="Center" FontSize="12"/>
+                        </StackPanel>
+                    </Button>
+
+                    <!-- Clear selection button -->
+                    <Button Command="{Binding ClearSelectionCommand}"
+                            Style="{StaticResource MaterialDesignIconForegroundButton}"
+                            ToolTip="取消选择"
+                            Width="28" Height="28"
+                            Padding="2">
+                        <md:PackIcon Kind="Close" Width="16" Height="16"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ==================== Batch Progress Overlay ==================== -->
+        <Grid Grid.Row="1" Panel.ZIndex="2"
+              Visibility="{Binding IsBatchOperating, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Border Background="{DynamicResource MaterialDesignPaper}" Opacity="0.7"/>
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
+                             IsIndeterminate="True"
+                             Width="48" Height="48"
+                             Value="0"/>
+                <TextBlock Text="{Binding BatchProgressText}"
+                           HorizontalAlignment="Center"
+                           Margin="0,12,0,0"
+                           FontSize="14"
+                           Foreground="{DynamicResource MaterialDesignBodyLight}"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Loading overlay -->
+        <Grid Grid.Row="1" Panel.ZIndex="1"
+              Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Border Background="{DynamicResource MaterialDesignPaper}" Opacity="0.7"/>
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
+                             IsIndeterminate="True"
+                             Width="48" Height="48"
+                             Value="0"/>
+                <TextBlock Text="加载中..."
+                           HorizontalAlignment="Center"
+                           Margin="0,12,0,0"
+                           FontSize="14"
+                           Foreground="{DynamicResource MaterialDesignBodyLight}"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Empty state message -->
+        <TextBlock Grid.Row="1"
+                   Text="暂无视频，请导入视频文件"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   FontSize="16"
+                   Foreground="{DynamicResource MaterialDesignBodyLight}"
+                   Opacity="0.6"
+                   Panel.ZIndex="0">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Videos.Count}" Value="0">
+                            <Setter Property="Visibility" Value="Visible"/>
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
+
+        <!-- Video list with virtualization and multi-select support -->
+        <ListBox x:Name="VideoListBox"
+                 Grid.Row="1"
+                 ItemsSource="{Binding Videos}"
+                 SelectedItem="{Binding SelectedVideo, Mode=TwoWay}"
+                 SelectionMode="Extended"
+                 SelectionChanged="VideoListBox_SelectionChanged"
+                 VirtualizingStackPanel.IsVirtualizing="True"
+                 VirtualizingStackPanel.VirtualizationMode="Recycling"
+                 VirtualizingStackPanel.ScrollUnit="Pixel"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 ScrollViewer.CanContentScroll="True"
+                 Background="Transparent"
+                 BorderThickness="0"
+                 Padding="4">
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <VirtualizingStackPanel IsVirtualizing="True"
+                                            VirtualizationMode="Recycling"/>
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem" BasedOn="{StaticResource MaterialDesignListBoxItem}">
+                    <Setter Property="Padding" Value="0"/>
+                    <Setter Property="Margin" Value="4"/>
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                    <EventSetter Event="MouseDoubleClick" Handler="VideoItem_MouseDoubleClick"/>
+                </Style>
+            </ListBox.ItemContainerStyle>
+
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <md:Card Padding="8"
+                             md:ElevationAssist.Elevation="Dp1"
+                             UniformCornerRadius="6">
+                        <md:Card.Style>
+                            <Style TargetType="md:Card" BasedOn="{StaticResource {x:Type md:Card}}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsFileMissing}" Value="True">
+                                        <Setter Property="Opacity" Value="0.5"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </md:Card.Style>
+                        <md:Card.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="编辑信息" Click="EditInfo_Click">
+                                    <MenuItem.Icon>
+                                        <md:PackIcon Kind="FileEdit" Width="16" Height="16"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="删除视频" Click="DeleteVideo_Click">
+                                    <MenuItem.Icon>
+                                        <md:PackIcon Kind="Delete" Width="16" Height="16"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <Separator/>
+                                <MenuItem Header="复制文件路径" Click="CopyFilePath_Click">
+                                    <MenuItem.Icon>
+                                        <md:PackIcon Kind="ContentCopy" Width="16" Height="16"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <MenuItem Header="使用系统播放器打开" Click="OpenWithSystemPlayer_Click">
+                                    <MenuItem.Icon>
+                                        <md:PackIcon Kind="PlayCircleOutline" Width="16" Height="16"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                                <Separator/>
+                                <MenuItem Header="打开所在文件夹" Click="OpenFolder_Click">
+                                    <MenuItem.Icon>
+                                        <md:PackIcon Kind="FolderOpen" Width="16" Height="16"/>
+                                    </MenuItem.Icon>
+                                </MenuItem>
+                            </ContextMenu>
+                        </md:Card.ContextMenu>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <!-- Thumbnail -->
+                                <ColumnDefinition Width="160"/>
+                                <!-- Spacing -->
+                                <ColumnDefinition Width="12"/>
+                                <!-- Video info -->
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Thumbnail image -->
+                            <Border Grid.Column="0"
+                                    Width="160" Height="90"
+                                    CornerRadius="4"
+                                    ClipToBounds="True"
+                                    Background="{DynamicResource MaterialDesignCardBackground}">
+                                <Grid>
+                                    <!-- Default placeholder icon -->
+                                    <md:PackIcon Kind="VideoOutline"
+                                                 Width="40" Height="40"
+                                                 HorizontalAlignment="Center"
+                                                 VerticalAlignment="Center"
+                                                 Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                 Opacity="0.4"/>
+                                    <!-- Actual thumbnail (overlays placeholder when loaded) -->
+                                    <Image Source="{Binding ThumbnailPath, IsAsync=True, Converter={StaticResource ThumbnailPathConverter}, TargetNullValue={x:Null}}"
+                                           Stretch="UniformToFill"
+                                           RenderOptions.BitmapScalingMode="HighQuality"/>
+                                    <!-- File missing overlay icon on thumbnail -->
+                                    <Border Background="#88000000"
+                                            Visibility="{Binding IsFileMissing, Converter={StaticResource BoolToVisConverter}}">
+                                        <md:PackIcon Kind="FileAlert"
+                                                     Width="32" Height="32"
+                                                     HorizontalAlignment="Center"
+                                                     VerticalAlignment="Center"
+                                                     Foreground="#EF5350"/>
+                                    </Border>
+                                </Grid>
+                            </Border>
+
+                            <!-- Video information -->
+                            <StackPanel Grid.Column="2"
+                                        VerticalAlignment="Center">
+                                <!-- Title -->
+                                <TextBlock Text="{Binding Title}"
+                                           FontSize="15"
+                                           FontWeight="Medium"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxHeight="40"
+                                           Foreground="{DynamicResource MaterialDesignBody}"/>
+
+                                <!-- File missing warning -->
+                                <StackPanel Orientation="Horizontal"
+                                            Margin="0,2,0,0"
+                                            Visibility="{Binding IsFileMissing, Converter={StaticResource BoolToVisConverter}}">
+                                    <md:PackIcon Kind="AlertCircleOutline"
+                                                 Width="14" Height="14"
+                                                 VerticalAlignment="Center"
+                                                 Foreground="#EF5350"
+                                                 Margin="0,0,4,0"/>
+                                    <TextBlock Text="文件缺失"
+                                               FontSize="12"
+                                               Foreground="#EF5350"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+
+                                <!-- File name (secondary) -->
+                                <TextBlock Text="{Binding FileName}"
+                                           FontSize="12"
+                                           Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                           TextTrimming="CharacterEllipsis"
+                                           Margin="0,4,0,0"
+                                           Opacity="0.7"/>
+
+                                <!-- Duration and file size row -->
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <!-- Duration chip -->
+                                    <Border Background="{DynamicResource PrimaryHueLightBrush}"
+                                            CornerRadius="4"
+                                            Padding="8,2"
+                                            Margin="0,0,8,0">
+                                        <StackPanel Orientation="Horizontal">
+                                            <md:PackIcon Kind="ClockOutline"
+                                                         Width="14" Height="14"
+                                                         VerticalAlignment="Center"
+                                                         Margin="0,0,4,0"
+                                                         Foreground="{DynamicResource PrimaryHueDarkForegroundBrush}"/>
+                                            <TextBlock Text="{Binding Duration, Converter={StaticResource DurationFormatConverter}}"
+                                                       FontSize="12"
+                                                       VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource PrimaryHueDarkForegroundBrush}"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- File size chip -->
+                                    <Border Background="{DynamicResource MaterialDesignChipBackground}"
+                                            CornerRadius="4"
+                                            Padding="8,2"
+                                            Margin="0,0,8,0">
+                                        <StackPanel Orientation="Horizontal">
+                                            <md:PackIcon Kind="Harddisk"
+                                                         Width="14" Height="14"
+                                                         VerticalAlignment="Center"
+                                                         Margin="0,0,4,0"/>
+                                            <TextBlock Text="{Binding FileSize, Converter={StaticResource FileSizeFormatConverter}}"
+                                                       FontSize="12"
+                                                       VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Resolution chip -->
+                                    <Border Background="{DynamicResource MaterialDesignChipBackground}"
+                                            CornerRadius="4"
+                                            Padding="8,2">
+                                        <StackPanel Orientation="Horizontal">
+                                            <md:PackIcon Kind="Monitor"
+                                                         Width="14" Height="14"
+                                                         VerticalAlignment="Center"
+                                                         Margin="0,0,4,0"/>
+                                            <TextBlock FontSize="12" VerticalAlignment="Center">
+                                                <TextBlock.Text>
+                                                    <MultiBinding StringFormat="{}{0}×{1}">
+                                                        <Binding Path="Width"/>
+                                                        <Binding Path="Height"/>
+                                                    </MultiBinding>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+
+                                <!-- Tags row -->
+                                <ItemsControl ItemsSource="{Binding Tags}"
+                                              Margin="0,6,0,0">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel Orientation="Horizontal"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{Binding Color, Converter={StaticResource ColorToSolidBrushConverter}}"
+                                                    CornerRadius="8"
+                                                    Padding="8,2"
+                                                    Margin="0,0,4,4">
+                                                <TextBlock Text="{Binding Name}"
+                                                           FontSize="11"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{Binding Color, Converter={StaticResource ColorToForegroundConverter}}"/>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Grid>
+                    </md:Card>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+    </Grid>
+</UserControl>

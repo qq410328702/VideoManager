@@ -1,0 +1,250 @@
+<UserControl x:Class="VideoManager.Views.CategoryPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:md="http://materialdesigninxaml.net/winfx/xaml/themes"
+             xmlns:vm="clr-namespace:VideoManager.ViewModels"
+             mc:Ignorable="d"
+             d:DesignHeight="600" d:DesignWidth="260"
+             d:DataContext="{d:DesignInstance Type=vm:CategoryViewModel, IsDesignTimeCreatable=False}">
+
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+    </UserControl.Resources>
+
+    <Grid>
+        <!-- Loading overlay -->
+        <Grid Panel.ZIndex="1"
+              Visibility="{Binding IsLoading, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <Border Background="{DynamicResource MaterialDesignPaper}" Opacity="0.7"/>
+            <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}"
+                         IsIndeterminate="True"
+                         Width="36" Height="36"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         Value="0"/>
+        </Grid>
+
+        <!-- Main content -->
+        <DockPanel>
+            <!-- ==================== Header ==================== -->
+            <Border DockPanel.Dock="Top"
+                    Background="{DynamicResource PrimaryHueMidBrush}"
+                    Padding="12,10">
+                <StackPanel Orientation="Horizontal">
+                    <md:PackIcon Kind="FolderMultiple"
+                                 Foreground="White"
+                                 VerticalAlignment="Center"
+                                 Width="20" Height="20"
+                                 Margin="0,0,8,0"/>
+                    <TextBlock Text="分类导航"
+                               Foreground="White"
+                               FontSize="16"
+                               FontWeight="Medium"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+
+            <!-- ==================== Category Section ==================== -->
+            <!-- Category section header -->
+            <Border DockPanel.Dock="Top" Padding="8,8,8,4">
+                <TextBlock Text="文件夹分类"
+                           FontSize="13"
+                           FontWeight="Medium"
+                           Foreground="{DynamicResource PrimaryHueMidBrush}"/>
+            </Border>
+
+            <!-- Add category input row -->
+            <Grid DockPanel.Dock="Top" Margin="8,0,8,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBox Grid.Column="0"
+                         Text="{Binding NewCategoryName, UpdateSourceTrigger=PropertyChanged}"
+                         md:HintAssist.Hint="新分类名称"
+                         md:HintAssist.IsFloating="False"
+                         Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                         FontSize="12"
+                         Padding="6,4"
+                         Margin="0,0,4,0"
+                         VerticalAlignment="Center"/>
+
+                <Button Grid.Column="1"
+                        Command="{Binding AddCategoryCommand}"
+                        Style="{StaticResource MaterialDesignIconButton}"
+                        ToolTip="添加分类（选中分类时作为子分类添加）"
+                        Width="32" Height="32"
+                        Padding="4">
+                    <md:PackIcon Kind="FolderPlus" Width="20" Height="20"/>
+                </Button>
+            </Grid>
+
+            <!-- Delete category button -->
+            <Grid DockPanel.Dock="Top" Margin="8,0,8,4">
+                <Button Command="{Binding DeleteCategoryCommand}"
+                        Style="{StaticResource MaterialDesignOutlinedButton}"
+                        HorizontalAlignment="Stretch"
+                        Padding="4,2"
+                        FontSize="12"
+                        Height="28"
+                        ToolTip="删除选中的分类">
+                    <StackPanel Orientation="Horizontal">
+                        <md:PackIcon Kind="FolderRemove"
+                                     Width="16" Height="16"
+                                     VerticalAlignment="Center"
+                                     Margin="0,0,4,0"/>
+                        <TextBlock Text="删除选中分类"
+                                   VerticalAlignment="Center"
+                                   FontSize="12"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+            <!-- Category TreeView -->
+            <TreeView x:Name="CategoryTreeView"
+                      DockPanel.Dock="Top"
+                      ItemsSource="{Binding Categories}"
+                      SelectedItemChanged="CategoryTreeView_SelectedItemChanged"
+                      MinHeight="120"
+                      MaxHeight="280"
+                      Padding="4"
+                      VirtualizingStackPanel.IsVirtualizing="True"
+                      VirtualizingStackPanel.VirtualizationMode="Recycling"
+                      BorderThickness="0,1,0,0"
+                      BorderBrush="{DynamicResource MaterialDesignDivider}">
+
+                <!-- Bind SelectedItem via code-behind (TreeView.SelectedItem is read-only) -->
+                <TreeView.Resources>
+                    <Style TargetType="TreeViewItem" BasedOn="{StaticResource {x:Type TreeViewItem}}">
+                        <Setter Property="IsExpanded" Value="True"/>
+                        <Setter Property="Padding" Value="2"/>
+                    </Style>
+                </TreeView.Resources>
+
+                <TreeView.ItemTemplate>
+                    <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                        <StackPanel Orientation="Horizontal" Margin="2,1">
+                            <md:PackIcon Kind="Folder"
+                                         Width="18" Height="18"
+                                         VerticalAlignment="Center"
+                                         Foreground="{DynamicResource PrimaryHueMidBrush}"
+                                         Margin="0,0,6,0"/>
+                            <TextBlock Text="{Binding Name}"
+                                       VerticalAlignment="Center"
+                                       FontSize="13"/>
+                        </StackPanel>
+                    </HierarchicalDataTemplate>
+                </TreeView.ItemTemplate>
+            </TreeView>
+
+            <!-- ==================== Separator ==================== -->
+            <Separator DockPanel.Dock="Top" Margin="8,4"/>
+
+            <!-- ==================== Tag Section ==================== -->
+            <!-- Tag section header -->
+            <Border DockPanel.Dock="Top" Padding="8,4,8,4">
+                <TextBlock Text="标签管理"
+                           FontSize="13"
+                           FontWeight="Medium"
+                           Foreground="{DynamicResource PrimaryHueMidBrush}"/>
+            </Border>
+
+            <!-- Add tag input row -->
+            <Grid DockPanel.Dock="Top" Margin="8,0,8,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBox Grid.Column="0"
+                         Text="{Binding NewTagName, UpdateSourceTrigger=PropertyChanged}"
+                         md:HintAssist.Hint="新标签名称"
+                         md:HintAssist.IsFloating="False"
+                         Style="{StaticResource MaterialDesignOutlinedTextBox}"
+                         FontSize="12"
+                         Padding="6,4"
+                         Margin="0,0,4,0"
+                         VerticalAlignment="Center"/>
+
+                <Button Grid.Column="1"
+                        Command="{Binding AddTagCommand}"
+                        Style="{StaticResource MaterialDesignIconButton}"
+                        ToolTip="添加标签"
+                        Width="32" Height="32"
+                        Padding="4">
+                    <md:PackIcon Kind="TagPlus" Width="20" Height="20"/>
+                </Button>
+            </Grid>
+
+            <!-- Delete tag button -->
+            <Grid DockPanel.Dock="Top" Margin="8,0,8,4">
+                <Button Command="{Binding DeleteTagCommand}"
+                        Style="{StaticResource MaterialDesignOutlinedButton}"
+                        HorizontalAlignment="Stretch"
+                        Padding="4,2"
+                        FontSize="12"
+                        Height="28"
+                        ToolTip="删除选中的标签">
+                    <StackPanel Orientation="Horizontal">
+                        <md:PackIcon Kind="TagRemove"
+                                     Width="16" Height="16"
+                                     VerticalAlignment="Center"
+                                     Margin="0,0,4,0"/>
+                        <TextBlock Text="删除选中标签"
+                                   VerticalAlignment="Center"
+                                   FontSize="12"/>
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+            <!-- Tag ListBox -->
+            <ListBox ItemsSource="{Binding Tags}"
+                     SelectedItem="{Binding SelectedTag, Mode=TwoWay}"
+                     Padding="4"
+                     Background="Transparent"
+                     BorderThickness="0,1,0,0"
+                     BorderBrush="{DynamicResource MaterialDesignDivider}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal" Margin="2,1">
+                            <md:PackIcon Kind="Tag"
+                                         Width="16" Height="16"
+                                         VerticalAlignment="Center"
+                                         Foreground="{DynamicResource SecondaryHueMidBrush}"
+                                         Margin="0,0,6,0"/>
+                            <TextBlock Text="{Binding Name}"
+                                       VerticalAlignment="Center"
+                                       FontSize="13"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+
+                <!-- Empty state for tags -->
+                <ListBox.Style>
+                    <Style TargetType="ListBox" BasedOn="{StaticResource {x:Type ListBox}}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Tags.Count}" Value="0">
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate>
+                                            <TextBlock Text="暂无标签"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"
+                                                       FontSize="12"
+                                                       Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                       Opacity="0.6"
+                                                       Margin="0,16"/>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ListBox.Style>
+            </ListBox>
+        </DockPanel>
+    </Grid>
+</UserControl>
