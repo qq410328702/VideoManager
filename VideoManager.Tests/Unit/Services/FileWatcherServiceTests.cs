@@ -1,4 +1,5 @@
 using System.IO;
+using Microsoft.Extensions.Logging.Abstractions;
 using VideoManager.Services;
 
 namespace VideoManager.Tests.Unit.Services;
@@ -19,12 +20,12 @@ public class FileWatcherServiceTests : IDisposable
             Directory.Delete(_tempDir, true);
     }
 
-    #region StartWatching â€” Initialization
+    #region StartWatching â€?Initialization
 
     [Fact]
     public void StartWatching_ValidDirectory_DoesNotThrow()
     {
-        using var service = new FileWatcherService();
+        using var service = new FileWatcherService(NullLogger<FileWatcherService>.Instance);
 
         var ex = Record.Exception(() => service.StartWatching(_tempDir));
 
@@ -35,7 +36,7 @@ public class FileWatcherServiceTests : IDisposable
     public void StartWatching_NonExistentDirectory_DoesNotThrow()
     {
         // Requirement 15.4: graceful degradation
-        using var service = new FileWatcherService();
+        using var service = new FileWatcherService(NullLogger<FileWatcherService>.Instance);
         var nonExistent = Path.Combine(_tempDir, "does_not_exist");
 
         var ex = Record.Exception(() => service.StartWatching(nonExistent));
@@ -47,7 +48,7 @@ public class FileWatcherServiceTests : IDisposable
     public void StartWatching_NullPath_DoesNotThrow()
     {
         // Requirement 15.4: graceful degradation
-        using var service = new FileWatcherService();
+        using var service = new FileWatcherService(NullLogger<FileWatcherService>.Instance);
 
         var ex = Record.Exception(() => service.StartWatching(null!));
 
@@ -58,7 +59,7 @@ public class FileWatcherServiceTests : IDisposable
     public void StartWatching_EmptyPath_DoesNotThrow()
     {
         // Requirement 15.4: graceful degradation
-        using var service = new FileWatcherService();
+        using var service = new FileWatcherService(NullLogger<FileWatcherService>.Instance);
 
         var ex = Record.Exception(() => service.StartWatching(string.Empty));
 
@@ -68,7 +69,7 @@ public class FileWatcherServiceTests : IDisposable
     [Fact]
     public void StartWatching_CalledTwice_DoesNotThrow()
     {
-        using var service = new FileWatcherService();
+        using var service = new FileWatcherService(NullLogger<FileWatcherService>.Instance);
 
         service.StartWatching(_tempDir);
         var ex = Record.Exception(() => service.StartWatching(_tempDir));
@@ -83,7 +84,7 @@ public class FileWatcherServiceTests : IDisposable
     [Fact]
     public void StopWatching_WithoutStarting_DoesNotThrow()
     {
-        using var service = new FileWatcherService();
+        using var service = new FileWatcherService(NullLogger<FileWatcherService>.Instance);
 
         var ex = Record.Exception(() => service.StopWatching());
 
@@ -93,7 +94,7 @@ public class FileWatcherServiceTests : IDisposable
     [Fact]
     public void StopWatching_AfterStarting_DoesNotThrow()
     {
-        using var service = new FileWatcherService();
+        using var service = new FileWatcherService(NullLogger<FileWatcherService>.Instance);
         service.StartWatching(_tempDir);
 
         var ex = Record.Exception(() => service.StopWatching());
@@ -109,7 +110,7 @@ public class FileWatcherServiceTests : IDisposable
     public async Task FileDeleted_WhenFileIsDeleted_RaisesEvent()
     {
         // Requirement 15.2: detect file deletion
-        using var service = new FileWatcherService();
+        using var service = new FileWatcherService(NullLogger<FileWatcherService>.Instance);
         var tcs = new TaskCompletionSource<FileDeletedEventArgs>();
 
         service.FileDeleted += (_, args) => tcs.TrySetResult(args);
@@ -140,7 +141,7 @@ public class FileWatcherServiceTests : IDisposable
     public async Task FileRenamed_WhenFileIsRenamed_RaisesEvent()
     {
         // Requirement 15.3: detect file rename
-        using var service = new FileWatcherService();
+        using var service = new FileWatcherService(NullLogger<FileWatcherService>.Instance);
         var tcs = new TaskCompletionSource<FileRenamedEventArgs>();
 
         service.FileRenamed += (_, args) => tcs.TrySetResult(args);
@@ -167,12 +168,12 @@ public class FileWatcherServiceTests : IDisposable
 
     #endregion
 
-    #region StopWatching â€” Events no longer raised
+    #region StopWatching â€?Events no longer raised
 
     [Fact]
     public async Task StopWatching_AfterStop_NoEventsRaised()
     {
-        using var service = new FileWatcherService();
+        using var service = new FileWatcherService(NullLogger<FileWatcherService>.Instance);
         var eventRaised = false;
 
         service.FileDeleted += (_, _) => eventRaised = true;
@@ -196,7 +197,7 @@ public class FileWatcherServiceTests : IDisposable
     [Fact]
     public void Dispose_CalledMultipleTimes_DoesNotThrow()
     {
-        var service = new FileWatcherService();
+        var service = new FileWatcherService(NullLogger<FileWatcherService>.Instance);
         service.StartWatching(_tempDir);
 
         service.Dispose();
@@ -212,7 +213,7 @@ public class FileWatcherServiceTests : IDisposable
     [Fact]
     public async Task FileDeleted_InSubdirectory_RaisesEvent()
     {
-        using var service = new FileWatcherService();
+        using var service = new FileWatcherService(NullLogger<FileWatcherService>.Instance);
         var tcs = new TaskCompletionSource<FileDeletedEventArgs>();
 
         service.FileDeleted += (_, args) => tcs.TrySetResult(args);

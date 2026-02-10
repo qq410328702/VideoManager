@@ -1,5 +1,6 @@
 using System.IO;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using VideoManager.Data;
 using VideoManager.Models;
 using VideoManager.Services;
@@ -19,7 +20,7 @@ public class DeleteServiceTests : IDisposable
         _context = new VideoManagerDbContext(options);
         _context.Database.OpenConnection();
         _context.Database.EnsureCreated();
-        _service = new DeleteService(_context);
+        _service = new DeleteService(_context, NullLogger<DeleteService>.Instance);
     }
 
     public void Dispose()

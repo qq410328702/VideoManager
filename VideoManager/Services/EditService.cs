@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using VideoManager.Data;
 using VideoManager.Models;
 
@@ -11,10 +12,12 @@ namespace VideoManager.Services;
 public class EditService : IEditService
 {
     private readonly VideoManagerDbContext _context;
+    private readonly ILogger<EditService> _logger;
 
-    public EditService(VideoManagerDbContext context)
+    public EditService(VideoManagerDbContext context, ILogger<EditService> logger)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <inheritdoc />
@@ -34,7 +37,11 @@ public class EditService : IEditService
         video.Title = title;
         video.Description = description;
 
+        ValidationHelper.ValidateEntity(video);
+
         await _context.SaveChangesAsync(ct);
+
+        _logger.LogInformation("Updated video info: ID={VideoId}, Title='{Title}'.", videoId, title);
 
         return video;
     }
@@ -59,6 +66,7 @@ public class EditService : IEditService
         {
             video.Tags.Add(tag);
             await _context.SaveChangesAsync(ct);
+            _logger.LogInformation("Added tag {TagId} to video {VideoId}.", tagId, videoId);
         }
     }
 
@@ -79,6 +87,7 @@ public class EditService : IEditService
 
         video.Tags.Remove(tag);
         await _context.SaveChangesAsync(ct);
+        _logger.LogInformation("Removed tag {TagId} from video {VideoId}.", tagId, videoId);
     }
 
     /// <inheritdoc />

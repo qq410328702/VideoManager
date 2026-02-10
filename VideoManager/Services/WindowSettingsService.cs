@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Windows;
+using Microsoft.Extensions.Logging;
 
 namespace VideoManager.Services;
 
@@ -23,15 +24,17 @@ public class WindowSettingsService : IWindowSettingsService
 
     private readonly string _settingsFilePath;
     private readonly Func<Rect> _screenBoundsProvider;
+    private readonly ILogger<WindowSettingsService> _logger;
 
     /// <summary>
     /// Creates a new WindowSettingsService with the default settings file path
     /// and screen bounds from SystemParameters.
     /// </summary>
-    public WindowSettingsService()
+    public WindowSettingsService(ILogger<WindowSettingsService> logger)
         : this(
             Path.Combine(AppContext.BaseDirectory, "Data", "window-settings.json"),
-            () => new Rect(0, 0, SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight))
+            () => new Rect(0, 0, SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight),
+            logger)
     {
     }
 
@@ -41,10 +44,12 @@ public class WindowSettingsService : IWindowSettingsService
     /// </summary>
     /// <param name="settingsFilePath">The path to the JSON settings file.</param>
     /// <param name="screenBoundsProvider">A function that returns the current screen bounds.</param>
-    internal WindowSettingsService(string settingsFilePath, Func<Rect> screenBoundsProvider)
+    /// <param name="logger">The logger instance.</param>
+    internal WindowSettingsService(string settingsFilePath, Func<Rect> screenBoundsProvider, ILogger<WindowSettingsService> logger)
     {
         _settingsFilePath = settingsFilePath ?? throw new ArgumentNullException(nameof(settingsFilePath));
         _screenBoundsProvider = screenBoundsProvider ?? throw new ArgumentNullException(nameof(screenBoundsProvider));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <inheritdoc />
@@ -54,6 +59,7 @@ public class WindowSettingsService : IWindowSettingsService
         {
             if (!File.Exists(_settingsFilePath))
             {
+                _logger.LogDebug("Window settings file not found: {SettingsFilePath}. Using defaults.", _settingsFilePath);
                 return null;
             }
 
@@ -62,19 +68,23 @@ public class WindowSettingsService : IWindowSettingsService
 
             if (settings is null)
             {
+                _logger.LogDebug("Window settings file deserialized to null: {SettingsFilePath}. Using defaults.", _settingsFilePath);
                 return null;
             }
 
+            _logger.LogDebug("Window settings loaded successfully from {SettingsFilePath}.", _settingsFilePath);
             return ValidateScreenBounds(settings);
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
             // JSON parse error → return null (use defaults)
+            _logger.LogError(ex, "Failed to parse window settings JSON from {SettingsFilePath}.", _settingsFilePath);
             return null;
         }
-        catch (IOException)
+        catch (IOException ex)
         {
             // File read error → return null (use defaults)
+            _logger.LogError(ex, "Failed to read window settings file from {SettingsFilePath}.", _settingsFilePath);
             return null;
         }
     }
@@ -84,14 +94,28 @@ public class WindowSettingsService : IWindowSettingsService
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        var directory = Path.GetDirectoryName(_settingsFilePath);
-        if (!string.IsNullOrEmpty(directory))
+        try
         {
-            Directory.CreateDirectory(directory);
-        }
+            var directory = Path.GetDirectoryName(_settingsFilePath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
 
-        var json = JsonSerializer.Serialize(settings, JsonOptions);
-        File.WriteAllText(_settingsFilePath, json);
+            var json = JsonSerializer.Serialize(settings, JsonOptions);
+            File.WriteAllText(_settingsFilePath, json);
+            _logger.LogDebug("Window settings saved successfully to {SettingsFilePath}.", _settingsFilePath);
+        }
+        catch (IOException ex)
+        {
+            _logger.LogError(ex, "Failed to save window settings to {SettingsFilePath}.", _settingsFilePath);
+            throw;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogError(ex, "Access denied when saving window settings to {SettingsFilePath}.", _settingsFilePath);
+            throw;
+        }
     }
 
     /// <summary>

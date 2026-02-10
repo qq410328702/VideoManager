@@ -1,5 +1,6 @@
 using System.IO;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using VideoManager.Data;
 
 namespace VideoManager.Services;
@@ -11,10 +12,12 @@ namespace VideoManager.Services;
 public class DeleteService : IDeleteService
 {
     private readonly VideoManagerDbContext _context;
+    private readonly ILogger<DeleteService> _logger;
 
-    public DeleteService(VideoManagerDbContext context)
+    public DeleteService(VideoManagerDbContext context, ILogger<DeleteService> logger)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <inheritdoc />
@@ -27,6 +30,7 @@ public class DeleteService : IDeleteService
 
         if (video is null)
         {
+            _logger.LogWarning("Delete requested for non-existent video ID {VideoId}.", videoId);
             return new DeleteResult(false, $"Video with ID {videoId} was not found.");
         }
 
@@ -37,11 +41,14 @@ public class DeleteService : IDeleteService
             fileError = TryDeleteFiles(video.FilePath, video.ThumbnailPath);
         }
 
-        // Always remove from database, even if file deletion failed (Req 12.4)
+        // Soft delete: mark as deleted instead of physically removing (Req 6.3)
         video.Tags.Clear();
         video.Categories.Clear();
-        _context.VideoEntries.Remove(video);
+        video.IsDeleted = true;
+        video.DeletedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync(ct);
+
+        _logger.LogInformation("Deleted video '{Title}' (ID: {VideoId}), deleteFile={DeleteFile}.", video.Title, videoId, deleteFile);
 
         return new DeleteResult(true, fileError);
     }
@@ -95,7 +102,7 @@ public class DeleteService : IDeleteService
     /// Attempts to delete the video file and thumbnail file from disk.
     /// Returns an error message if any deletion fails, or null if all succeeded.
     /// </summary>
-    private static string? TryDeleteFiles(string? filePath, string? thumbnailPath)
+    private string? TryDeleteFiles(string? filePath, string? thumbnailPath)
     {
         var errors = new List<string>();
 
@@ -110,6 +117,7 @@ public class DeleteService : IDeleteService
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Failed to delete video file '{FilePath}'.", filePath);
                 errors.Add($"Failed to delete video file '{filePath}': {ex.Message}");
             }
         }
@@ -125,6 +133,7 @@ public class DeleteService : IDeleteService
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Failed to delete thumbnail '{ThumbnailPath}'.", thumbnailPath);
                 errors.Add($"Failed to delete thumbnail '{thumbnailPath}': {ex.Message}");
             }
         }

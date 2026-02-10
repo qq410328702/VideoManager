@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using VideoManager.Data;
 using VideoManager.Models;
 using VideoManager.Services;
@@ -18,7 +19,7 @@ public class SearchServiceTests : IDisposable
         _context = new VideoManagerDbContext(options);
         _context.Database.OpenConnection();
         _context.Database.EnsureCreated();
-        _service = new SearchService(_context);
+        _service = new SearchService(_context, NullLogger<SearchService>.Instance);
     }
 
     public void Dispose()

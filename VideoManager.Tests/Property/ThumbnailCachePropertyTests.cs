@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using VideoManager.Services;
 
 namespace VideoManager.Tests.PropertyTests;
@@ -61,7 +62,7 @@ public class ThumbnailCachePropertyTests
             {
                 Interlocked.Increment(ref callCount);
                 return fileExists;
-            });
+            }, NullLogger<ThumbnailCacheService>.Instance);
 
             // First call
             var firstResult = service.LoadThumbnailAsync(thumbnailPath)

@@ -1,4 +1,5 @@
 using System.IO;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using VideoManager.Models;
@@ -50,11 +51,15 @@ public class ImportServiceTests : IDisposable
                 return entry;
             });
 
+        // Default: AddRangeAsync succeeds (batch write)
+        _mockVideoRepo.Setup(r => r.AddRangeAsync(It.IsAny<IEnumerable<VideoEntry>>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
         _service = new ImportService(_mockFfmpeg.Object, _mockVideoRepo.Object, Options.Create(new VideoManagerOptions
         {
             VideoLibraryPath = _videoLibraryDir,
             ThumbnailDirectory = _thumbnailDir
-        }));
+        }), NullLogger<ImportService>.Instance);
     }
 
     public void Dispose()
@@ -285,11 +290,9 @@ public class ImportServiceTests : IDisposable
         // File should exist in library
         Assert.True(File.Exists(Path.Combine(_videoLibraryDir, "movie.mp4")));
 
-        // VideoRepository.AddAsync should have been called once
-        _mockVideoRepo.Verify(r => r.AddAsync(It.Is<VideoEntry>(e =>
-            e.FileName == "movie.mp4" &&
-            e.Title == "movie" &&
-            e.OriginalFileName == null
+        // VideoRepository.AddRangeAsync should have been called with the entry
+        _mockVideoRepo.Verify(r => r.AddRangeAsync(It.Is<IEnumerable<VideoEntry>>(entries =>
+            entries.Any(e => e.FileName == "movie.mp4" && e.Title == "movie" && e.OriginalFileName == null)
         ), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -338,9 +341,8 @@ public class ImportServiceTests : IDisposable
         Assert.True(File.Exists(Path.Combine(_videoLibraryDir, "video_1.mp4")));
 
         // OriginalFileName should be recorded
-        _mockVideoRepo.Verify(r => r.AddAsync(It.Is<VideoEntry>(e =>
-            e.FileName == "video_1.mp4" &&
-            e.OriginalFileName == "video.mp4"
+        _mockVideoRepo.Verify(r => r.AddRangeAsync(It.Is<IEnumerable<VideoEntry>>(entries =>
+            entries.Any(e => e.FileName == "video_1.mp4" && e.OriginalFileName == "video.mp4")
         ), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -378,12 +380,13 @@ public class ImportServiceTests : IDisposable
         var result = await _service.ImportVideosAsync(files, ImportMode.Copy, new Progress<ImportProgress>(), CancellationToken.None);
 
         Assert.Equal(1, result.SuccessCount);
-        _mockVideoRepo.Verify(r => r.AddAsync(It.Is<VideoEntry>(e =>
-            e.Duration == TimeSpan.FromMinutes(5) &&
-            e.Width == 3840 &&
-            e.Height == 2160 &&
-            e.Codec == "hevc" &&
-            e.Bitrate == 10000000
+        _mockVideoRepo.Verify(r => r.AddRangeAsync(It.Is<IEnumerable<VideoEntry>>(entries =>
+            entries.Any(e =>
+                e.Duration == TimeSpan.FromMinutes(5) &&
+                e.Width == 3840 &&
+                e.Height == 2160 &&
+                e.Codec == "hevc" &&
+                e.Bitrate == 10000000)
         ), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -399,10 +402,11 @@ public class ImportServiceTests : IDisposable
         var result = await _service.ImportVideosAsync(files, ImportMode.Copy, new Progress<ImportProgress>(), CancellationToken.None);
 
         Assert.Equal(1, result.SuccessCount);
-        _mockVideoRepo.Verify(r => r.AddAsync(It.Is<VideoEntry>(e =>
-            e.Duration == TimeSpan.Zero &&
-            e.Width == 0 &&
-            e.Height == 0
+        _mockVideoRepo.Verify(r => r.AddRangeAsync(It.Is<IEnumerable<VideoEntry>>(entries =>
+            entries.Any(e =>
+                e.Duration == TimeSpan.Zero &&
+                e.Width == 0 &&
+                e.Height == 0)
         ), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -422,8 +426,8 @@ public class ImportServiceTests : IDisposable
         var result = await _service.ImportVideosAsync(files, ImportMode.Copy, new Progress<ImportProgress>(), CancellationToken.None);
 
         Assert.Equal(1, result.SuccessCount);
-        _mockVideoRepo.Verify(r => r.AddAsync(It.Is<VideoEntry>(e =>
-            e.ThumbnailPath == null
+        _mockVideoRepo.Verify(r => r.AddRangeAsync(It.Is<IEnumerable<VideoEntry>>(entries =>
+            entries.Any(e => e.ThumbnailPath == null)
         ), It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -554,13 +558,14 @@ public class ImportServiceTests : IDisposable
         var result = await _service.ImportVideosAsync(files, ImportMode.Copy, new Progress<ImportProgress>(), CancellationToken.None);
 
         Assert.Equal(1, result.SuccessCount);
-        _mockVideoRepo.Verify(r => r.AddAsync(It.Is<VideoEntry>(e =>
-            e.Title == "my_video" &&
-            e.FileName == "my_video.mov" &&
-            e.FilePath == Path.Combine(_videoLibraryDir, "my_video.mov") &&
-            e.FileSize == 2 &&
-            e.ImportedAt != default &&
-            e.CreatedAt != default
+        _mockVideoRepo.Verify(r => r.AddRangeAsync(It.Is<IEnumerable<VideoEntry>>(entries =>
+            entries.Any(e =>
+                e.Title == "my_video" &&
+                e.FileName == "my_video.mov" &&
+                e.FilePath == Path.Combine(_videoLibraryDir, "my_video.mov") &&
+                e.FileSize == 2 &&
+                e.ImportedAt != default &&
+                e.CreatedAt != default)
         ), It.IsAny<CancellationToken>()), Times.Once);
     }
 

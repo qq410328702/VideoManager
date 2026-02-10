@@ -1,15 +1,19 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using VideoManager.Services;
 
 namespace VideoManager.Tests.Unit.Services;
 
 public class ThumbnailCacheServiceTests
 {
+    private static readonly ILogger<ThumbnailCacheService> _nullLogger = NullLogger<ThumbnailCacheService>.Instance;
+
     #region LoadThumbnailAsync — File exists
 
     [Fact]
     public async Task LoadThumbnailAsync_FileExists_ReturnsPath()
     {
-        var service = new ThumbnailCacheService(_ => true);
+        var service = new ThumbnailCacheService(_ => true, _nullLogger);
 
         var result = await service.LoadThumbnailAsync("/thumbnails/video1.jpg");
 
@@ -23,7 +27,7 @@ public class ThumbnailCacheServiceTests
     [Fact]
     public async Task LoadThumbnailAsync_FileDoesNotExist_ReturnsNull()
     {
-        var service = new ThumbnailCacheService(_ => false);
+        var service = new ThumbnailCacheService(_ => false, _nullLogger);
 
         var result = await service.LoadThumbnailAsync("/thumbnails/missing.jpg");
 
@@ -42,7 +46,7 @@ public class ThumbnailCacheServiceTests
         {
             callCount++;
             return true;
-        });
+        }, _nullLogger);
 
         var first = await service.LoadThumbnailAsync("/thumbnails/video1.jpg");
         var second = await service.LoadThumbnailAsync("/thumbnails/video1.jpg");
@@ -60,7 +64,7 @@ public class ThumbnailCacheServiceTests
         {
             callCount++;
             return false;
-        });
+        }, _nullLogger);
 
         var first = await service.LoadThumbnailAsync("/thumbnails/missing.jpg");
         var second = await service.LoadThumbnailAsync("/thumbnails/missing.jpg");
@@ -77,7 +81,7 @@ public class ThumbnailCacheServiceTests
     [Fact]
     public async Task LoadThumbnailAsync_DifferentPaths_CachedIndependently()
     {
-        var service = new ThumbnailCacheService(path => path.Contains("exists"));
+        var service = new ThumbnailCacheService(path => path.Contains("exists"), _nullLogger);
 
         var existing = await service.LoadThumbnailAsync("/thumbnails/exists.jpg");
         var missing = await service.LoadThumbnailAsync("/thumbnails/gone.jpg");
@@ -93,7 +97,7 @@ public class ThumbnailCacheServiceTests
     [Fact]
     public async Task LoadThumbnailAsync_NullPath_ThrowsArgumentNullException()
     {
-        var service = new ThumbnailCacheService(_ => true);
+        var service = new ThumbnailCacheService(_ => true, _nullLogger);
 
         await Assert.ThrowsAsync<ArgumentNullException>(
             () => service.LoadThumbnailAsync(null!));
@@ -111,7 +115,7 @@ public class ThumbnailCacheServiceTests
         {
             callCount++;
             return true;
-        });
+        }, _nullLogger);
 
         await service.LoadThumbnailAsync("/thumbnails/video1.jpg");
         Assert.Equal(1, callCount);
@@ -130,7 +134,7 @@ public class ThumbnailCacheServiceTests
         {
             callCount++;
             return true;
-        });
+        }, _nullLogger);
 
         await service.LoadThumbnailAsync("/thumbnails/a.jpg");
         await service.LoadThumbnailAsync("/thumbnails/b.jpg");
@@ -150,7 +154,7 @@ public class ThumbnailCacheServiceTests
     [Fact]
     public void Constructor_NullFileExistsCheck_ThrowsArgumentNullException()
     {
-        Assert.Throws<ArgumentNullException>(() => new ThumbnailCacheService(null!));
+        Assert.Throws<ArgumentNullException>(() => new ThumbnailCacheService(null!, _nullLogger));
     }
 
     #endregion

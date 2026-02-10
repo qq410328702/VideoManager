@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using Microsoft.Extensions.Logging.Abstractions;
 using VideoManager.Services;
 
 namespace VideoManager.Tests.PropertyTests;
@@ -38,7 +39,7 @@ public class WindowSettingsPropertyTests : IDisposable
 
     private WindowSettingsService CreateService()
     {
-        return new WindowSettingsService(_settingsFilePath, () => _screenBounds);
+        return new WindowSettingsService(_settingsFilePath, () => _screenBounds, NullLogger<WindowSettingsService>.Instance);
     }
 
     /// <summary>

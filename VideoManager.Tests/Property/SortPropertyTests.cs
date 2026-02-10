@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using VideoManager.Data;
 using VideoManager.Models;
 using VideoManager.Services;
@@ -77,7 +78,7 @@ public class SortPropertyTests
             };
 
             using var context = CreateInMemoryContext();
-            var searchService = new SearchService(context);
+            var searchService = new SearchService(context, NullLogger<SearchService>.Instance);
             var ct = CancellationToken.None;
 
             // --- Setup: create videos with varied properties ---

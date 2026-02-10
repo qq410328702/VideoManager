@@ -1,6 +1,10 @@
+using System.Collections.Concurrent;
 using System.IO;
 using System.Threading;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Polly;
+using Polly.Retry;
 using VideoManager.Models;
 using VideoManager.Repositories;
 
@@ -24,8 +28,25 @@ public class ImportService : IImportService
         ".wmv"
     };
 
+    /// <summary>
+    /// Polly resilience pipeline for retrying transient FFmpeg failures.
+    /// Retries up to 2 times with linear backoff (1s, 2s). Does not retry on cancellation.
+    /// </summary>
+    private static readonly ResiliencePipeline RetryPipeline =
+        new ResiliencePipelineBuilder()
+            .AddRetry(new RetryStrategyOptions
+            {
+                MaxRetryAttempts = 2,
+                Delay = TimeSpan.FromSeconds(1),
+                BackoffType = DelayBackoffType.Linear,
+                ShouldHandle = new PredicateBuilder()
+                    .Handle<Exception>(ex => ex is not OperationCanceledException)
+            })
+            .Build();
+
     private readonly IFFmpegService _ffmpegService;
     private readonly IVideoRepository _videoRepository;
+    private readonly ILogger<ImportService> _logger;
     private readonly string _videoLibraryPath;
     private readonly string _thumbnailDir;
 
@@ -35,10 +56,12 @@ public class ImportService : IImportService
     /// <param name="ffmpegService">FFmpeg service for metadata extraction and thumbnail generation.</param>
     /// <param name="videoRepository">Repository for persisting video entries.</param>
     /// <param name="options">Configuration options containing video library and thumbnail directory paths.</param>
-    public ImportService(IFFmpegService ffmpegService, IVideoRepository videoRepository, IOptions<VideoManagerOptions> options)
+    /// <param name="logger">Logger for structured logging.</param>
+    public ImportService(IFFmpegService ffmpegService, IVideoRepository videoRepository, IOptions<VideoManagerOptions> options, ILogger<ImportService> logger)
     {
         _ffmpegService = ffmpegService ?? throw new ArgumentNullException(nameof(ffmpegService));
         _videoRepository = videoRepository ?? throw new ArgumentNullException(nameof(videoRepository));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         ArgumentNullException.ThrowIfNull(options);
         _videoLibraryPath = options.Value.VideoLibraryPath ?? throw new ArgumentException("VideoLibraryPath must be configured.", nameof(options));
         _thumbnailDir = options.Value.ThumbnailDirectory ?? throw new ArgumentException("ThumbnailDirectory must be configured.", nameof(options));
@@ -113,15 +136,47 @@ public class ImportService : IImportService
         }
 
         // Phase 2: Extract metadata and generate thumbnails in parallel using SemaphoreSlim.
+        // Collect successful VideoEntry objects into a thread-safe collection for batch writing.
         var maxParallelism = Math.Max(1, Environment.ProcessorCount);
         using var semaphore = new SemaphoreSlim(maxParallelism, maxParallelism);
+        var successEntries = new ConcurrentBag<VideoEntry>();
 
         var tasks = filesToProcess.Select(item => ProcessFileMetadataAsync(
             item.File, item.DestinationPath, item.DestinationFileName,
-            semaphore, completed, successCount, errors, errorLock,
+            semaphore, successEntries, completed, errors, errorLock,
             total, progress, ct)).ToArray();
 
         await Task.WhenAll(tasks);
+
+        // Phase 3: Batch-write all collected entries to the database.
+        if (successEntries.Count > 0)
+        {
+            try
+            {
+                await _videoRepository.AddRangeAsync(successEntries, ct);
+                Interlocked.Add(ref successCount[0], successEntries.Count);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "批量写入失败，回退到逐条写入");
+                foreach (var entry in successEntries)
+                {
+                    try
+                    {
+                        await _videoRepository.AddAsync(entry, ct);
+                        Interlocked.Increment(ref successCount[0]);
+                    }
+                    catch (Exception innerEx)
+                    {
+                        _logger.LogError(innerEx, "逐条写入失败: {Title}", entry.Title);
+                        lock (errorLock)
+                        {
+                            errors.Add(new ImportError(entry.FilePath, innerEx.Message));
+                        }
+                    }
+                }
+            }
+        }
 
         // Report final progress
         progress?.Report(new ImportProgress(total, total, string.Empty));
@@ -132,14 +187,15 @@ public class ImportService : IImportService
     /// <summary>
     /// Processes metadata extraction and thumbnail generation for a single file,
     /// controlled by the semaphore for parallelism limiting.
+    /// Successful entries are collected into the successEntries bag for batch writing.
     /// </summary>
     private async Task ProcessFileMetadataAsync(
         VideoFileInfo file,
         string destinationPath,
         string destinationFileName,
         SemaphoreSlim semaphore,
+        ConcurrentBag<VideoEntry> successEntries,
         int[] completed,
-        int[] successCount,
         List<ImportError> errors,
         object errorLock,
         int total,
@@ -151,30 +207,36 @@ public class ImportService : IImportService
         {
             ct.ThrowIfCancellationRequested();
 
-            // Extract metadata via FFmpeg
+            // Extract metadata via FFmpeg with retry
             VideoMetadata metadata;
             try
             {
-                metadata = await _ffmpegService.ExtractMetadataAsync(destinationPath, ct);
+                metadata = await RetryPipeline.ExecuteAsync(
+                    async token => await _ffmpegService.ExtractMetadataAsync(destinationPath, token),
+                    ct);
             }
-            catch (Exception)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Use default metadata if extraction fails
+                // All retries exhausted — use default metadata
+                _logger.LogWarning(ex, "元数据提取重试全部失败，使用默认值: {Path}", destinationPath);
                 metadata = new VideoMetadata(TimeSpan.Zero, 0, 0, string.Empty, 0);
             }
 
-            // Generate thumbnail via FFmpeg
+            // Generate thumbnail via FFmpeg with retry
             string? thumbnailPath = null;
             try
             {
-                thumbnailPath = await _ffmpegService.GenerateThumbnailAsync(destinationPath, _thumbnailDir, ct);
+                thumbnailPath = await RetryPipeline.ExecuteAsync(
+                    async token => await _ffmpegService.GenerateThumbnailAsync(destinationPath, _thumbnailDir, token),
+                    ct);
             }
-            catch (Exception)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Thumbnail generation failed; leave as null (use default placeholder)
+                // All retries exhausted — thumbnailPath remains null (use default placeholder)
+                _logger.LogWarning(ex, "缩略图生成重试全部失败: {Path}", destinationPath);
             }
 
-            // Create VideoEntry database record
+            // Create VideoEntry record (not yet persisted)
             var now = DateTime.UtcNow;
             var entry = new VideoEntry
             {
@@ -193,8 +255,10 @@ public class ImportService : IImportService
                 CreatedAt = now
             };
 
-            await _videoRepository.AddAsync(entry, ct);
-            Interlocked.Increment(ref successCount[0]);
+            ValidationHelper.ValidateEntity(entry);
+
+            // Collect entry for batch writing (instead of writing individually)
+            successEntries.Add(entry);
         }
         catch (OperationCanceledException)
         {

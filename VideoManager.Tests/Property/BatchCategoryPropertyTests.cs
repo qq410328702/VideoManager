@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using VideoManager.Data;
 using VideoManager.Models;
 using VideoManager.Services;
@@ -66,7 +67,7 @@ public class BatchCategoryPropertyTests
             int seed = config[1];
 
             using var context = CreateInMemoryContext();
-            var editService = new EditService(context);
+            var editService = new EditService(context, NullLogger<EditService>.Instance);
 
             // Setup: create videos
             var videoIds = new List<int>();

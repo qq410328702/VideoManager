@@ -20,6 +20,12 @@ public class VideoRepository : IVideoRepository
         return entry;
     }
 
+    public async Task AddRangeAsync(IEnumerable<VideoEntry> entries, CancellationToken ct)
+    {
+        _context.VideoEntries.AddRange(entries);
+        await _context.SaveChangesAsync(ct);
+    }
+
     public async Task<VideoEntry?> GetByIdAsync(int id, CancellationToken ct)
     {
         return await _context.VideoEntries

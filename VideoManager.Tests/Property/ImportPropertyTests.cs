@@ -1,5 +1,6 @@
 using System.IO;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using VideoManager.Data;
@@ -198,7 +199,8 @@ public class ImportPropertyTests : IDisposable
                 {
                     VideoLibraryPath = videoLibraryDir,
                     ThumbnailDirectory = thumbnailDir
-                }));
+                }),
+                NullLogger<ImportService>.Instance);
 
             // Execute import
             var result = importService.ImportVideosAsync(
@@ -288,7 +290,8 @@ public class ImportPropertyTests : IDisposable
                 {
                     VideoLibraryPath = videoLibraryDir,
                     ThumbnailDirectory = thumbnailDir
-                }));
+                }),
+                NullLogger<ImportService>.Instance);
 
             // Execute import
             var files = new List<VideoFileInfo>
@@ -392,7 +395,8 @@ public class ImportPropertyTests : IDisposable
                 {
                     VideoLibraryPath = videoLibraryDir,
                     ThumbnailDirectory = thumbnailDir
-                }));
+                }),
+                NullLogger<ImportService>.Instance);
 
             // Import first file
             var result1 = importService.ImportVideosAsync(

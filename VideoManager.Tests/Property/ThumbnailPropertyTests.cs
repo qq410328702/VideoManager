@@ -1,5 +1,6 @@
 using System.IO;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using VideoManager.Data;
@@ -148,7 +149,8 @@ public class ThumbnailPropertyTests : IDisposable
                 {
                     VideoLibraryPath = videoLibraryDir,
                     ThumbnailDirectory = thumbnailDir
-                }));
+                }),
+                NullLogger<ImportService>.Instance);
 
             // Execute import
             var files = new List<VideoFileInfo>

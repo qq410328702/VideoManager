@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Runtime.CompilerServices;
 
@@ -7,8 +8,11 @@ namespace VideoManager.Models;
 public class VideoEntry : INotifyPropertyChanged
 {
     public int Id { get; set; }
+    [Required]
+    [StringLength(500)]
     public string Title { get; set; } = string.Empty;
     public string? Description { get; set; }
+    [Required]
     public string FileName { get; set; } = string.Empty;
     public string? OriginalFileName { get; set; }
 
@@ -45,6 +49,16 @@ public class VideoEntry : INotifyPropertyChanged
     public long Bitrate { get; set; }
     public DateTime ImportedAt { get; set; }
     public DateTime CreatedAt { get; set; }
+
+    /// <summary>
+    /// 软删除标记。true 表示已删除。
+    /// </summary>
+    public bool IsDeleted { get; set; }
+
+    /// <summary>
+    /// 软删除时间（UTC）。
+    /// </summary>
+    public DateTime? DeletedAt { get; set; }
 
     /// <summary>
     /// Marks whether the video file is missing from disk (detected by FileWatcher).

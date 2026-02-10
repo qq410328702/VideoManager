@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using VideoManager.Data;
 using VideoManager.Models;
 using VideoManager.Services;
@@ -74,7 +75,7 @@ public class EditPropertyTests
             FsCheck.Fluent.Prop.ForAll(OptionalDescriptionArb(), newDescription =>
             {
                 using var context = CreateInMemoryContext();
-                var editService = new EditService(context);
+                var editService = new EditService(context, NullLogger<EditService>.Instance);
                 var ct = CancellationToken.None;
 
                 // --- Setup: create a video entry with initial values ---
@@ -155,7 +156,7 @@ public class EditPropertyTests
         return FsCheck.Fluent.Prop.ForAll(InvalidTitleArb(), invalidTitle =>
         {
             using var context = CreateInMemoryContext();
-            var editService = new EditService(context);
+            var editService = new EditService(context, NullLogger<EditService>.Instance);
             var ct = CancellationToken.None;
 
             // --- Setup: create a video entry with known initial values ---

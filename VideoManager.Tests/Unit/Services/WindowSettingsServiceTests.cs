@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using System.Windows;
+using Microsoft.Extensions.Logging.Abstractions;
 using VideoManager.Services;
 
 namespace VideoManager.Tests.Unit.Services;
@@ -27,7 +28,7 @@ public class WindowSettingsServiceTests : IDisposable
     private WindowSettingsService CreateService(Rect? screenBounds = null)
     {
         var bounds = screenBounds ?? _screenBounds;
-        return new WindowSettingsService(_settingsFilePath, () => bounds);
+        return new WindowSettingsService(_settingsFilePath, () => bounds, NullLogger<WindowSettingsService>.Instance);
     }
 
     private void WriteSettingsFile(string json)

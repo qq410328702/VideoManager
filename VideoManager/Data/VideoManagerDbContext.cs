@@ -67,5 +67,9 @@ public class VideoManagerDbContext : DbContext
             .HasIndex(v => v.DurationTicks);
         modelBuilder.Entity<VideoEntry>()
             .HasIndex(v => v.FileSize);
+
+        // 软删除全局过滤器
+        modelBuilder.Entity<VideoEntry>()
+            .HasQueryFilter(v => !v.IsDeleted);
     }
 }

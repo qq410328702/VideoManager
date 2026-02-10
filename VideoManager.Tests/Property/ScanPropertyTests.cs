@@ -1,4 +1,5 @@
 using System.IO;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using VideoManager.Models;
@@ -121,7 +122,8 @@ public class ScanPropertyTests
                     {
                         VideoLibraryPath = tempDir,
                         ThumbnailDirectory = tempDir
-                    }));
+                    }),
+                    NullLogger<ImportService>.Instance);
                 var result = service.ScanFolderAsync(tempDir, CancellationToken.None)
                     .GetAwaiter().GetResult();
 

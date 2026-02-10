@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using VideoManager.Data;
 using VideoManager.Models;
 
@@ -7,10 +8,12 @@ namespace VideoManager.Services;
 public class SearchService : ISearchService
 {
     private readonly VideoManagerDbContext _context;
+    private readonly ILogger<SearchService> _logger;
 
-    public SearchService(VideoManagerDbContext context)
+    public SearchService(VideoManagerDbContext context, ILogger<SearchService> logger)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     public async Task<PagedResult<VideoEntry>> SearchAsync(
@@ -22,7 +25,8 @@ public class SearchService : ISearchService
 
         IQueryable<VideoEntry> query = _context.VideoEntries
             .Include(v => v.Tags)
-            .Include(v => v.Categories);
+            .Include(v => v.Categories)
+            .AsNoTracking();
 
         // Keyword: fuzzy match on Title or Description (case-insensitive)
         if (!string.IsNullOrWhiteSpace(criteria.Keyword))
@@ -68,6 +72,10 @@ public class SearchService : ISearchService
 
         // Get total count before pagination
         var totalCount = await query.CountAsync(ct);
+
+        _logger.LogDebug("Search executed: Keyword={Keyword}, TagIds={TagIds}, DateFrom={DateFrom}, DateTo={DateTo}, TotalCount={TotalCount}.",
+            criteria.Keyword, criteria.TagIds != null ? string.Join(",", criteria.TagIds) : "none",
+            criteria.DateFrom, criteria.DateTo, totalCount);
 
         // Apply sorting based on criteria
         IOrderedQueryable<VideoEntry> orderedQuery = (criteria.SortBy, criteria.SortDir) switch

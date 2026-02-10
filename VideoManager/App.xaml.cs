@@ -2,6 +2,7 @@
 using System.Windows;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using VideoManager.Data;
 using VideoManager.Models;
@@ -86,6 +87,16 @@ public partial class App : Application
                     dbContext.Database.ExecuteSqlRaw("CREATE INDEX IF NOT EXISTS IX_VideoEntries_FileSize ON VideoEntries (FileSize)");
                 }
                 catch { /* index already exists */ }
+                try
+                {
+                    dbContext.Database.ExecuteSqlRaw("ALTER TABLE VideoEntries ADD COLUMN IsDeleted INTEGER NOT NULL DEFAULT 0");
+                }
+                catch { /* column already exists */ }
+                try
+                {
+                    dbContext.Database.ExecuteSqlRaw("ALTER TABLE VideoEntries ADD COLUMN DeletedAt TEXT NULL");
+                }
+                catch { /* column already exists */ }
             }
         }
 
@@ -123,6 +134,13 @@ public partial class App : Application
         services.AddDbContext<VideoManagerDbContext>(options =>
             options.UseSqlite($"Data Source={dbPath}"),
             ServiceLifetime.Scoped);
+
+        // --- Logging ---
+        services.AddLogging(builder =>
+        {
+            builder.AddDebug();
+            builder.SetMinimumLevel(LogLevel.Debug);
+        });
 
         // --- Repositories (Singleton – they receive a scoped DbContext via scope) ---
         services.AddScoped<IVideoRepository, VideoRepository>();

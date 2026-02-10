@@ -1,5 +1,5 @@
-using System.Diagnostics;
 using System.IO;
+using Microsoft.Extensions.Logging;
 
 namespace VideoManager.Services;
 
@@ -11,8 +11,17 @@ namespace VideoManager.Services;
 /// </summary>
 public class FileWatcherService : IFileWatcherService
 {
+    private readonly ILogger<FileWatcherService> _logger;
     private FileSystemWatcher? _watcher;
     private bool _disposed;
+
+    /// <summary>
+    /// Creates a new FileWatcherService with the specified logger.
+    /// </summary>
+    public FileWatcherService(ILogger<FileWatcherService> logger)
+    {
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+    }
 
     /// <inheritdoc />
     public event EventHandler<FileDeletedEventArgs>? FileDeleted;
@@ -25,7 +34,7 @@ public class FileWatcherService : IFileWatcherService
     {
         if (string.IsNullOrWhiteSpace(directoryPath))
         {
-            Trace.TraceWarning("[FileWatcherService] Directory path is null or empty. File watching is disabled.");
+            _logger.LogWarning("Directory path is null or empty. File watching is disabled.");
             return;
         }
 
@@ -36,7 +45,7 @@ public class FileWatcherService : IFileWatcherService
 
             if (!Directory.Exists(directoryPath))
             {
-                Trace.TraceWarning($"[FileWatcherService] Directory does not exist: '{directoryPath}'. File watching is disabled.");
+                _logger.LogWarning("Directory does not exist: '{DirectoryPath}'. File watching is disabled.", directoryPath);
                 return;
             }
 
@@ -51,12 +60,12 @@ public class FileWatcherService : IFileWatcherService
             _watcher.Renamed += OnFileRenamed;
             _watcher.Error += OnWatcherError;
 
-            Trace.TraceInformation($"[FileWatcherService] Started watching directory: '{directoryPath}'");
+            _logger.LogInformation("Started watching directory: '{DirectoryPath}'.", directoryPath);
         }
         catch (Exception ex)
         {
             // Requirement 15.4: Log error and continue normally; file monitoring degrades
-            Trace.TraceError($"[FileWatcherService] Failed to initialize FileSystemWatcher for '{directoryPath}': {ex.Message}");
+            _logger.LogError(ex, "Failed to initialize FileSystemWatcher for '{DirectoryPath}'.", directoryPath);
             CleanupWatcher();
         }
     }
@@ -78,7 +87,7 @@ public class FileWatcherService : IFileWatcherService
         }
         catch (Exception ex)
         {
-            Trace.TraceError($"[FileWatcherService] Error handling file deleted event for '{e.FullPath}': {ex.Message}");
+            _logger.LogError(ex, "Error handling file deleted event for '{FilePath}'.", e.FullPath);
         }
     }
 
@@ -93,7 +102,7 @@ public class FileWatcherService : IFileWatcherService
         }
         catch (Exception ex)
         {
-            Trace.TraceError($"[FileWatcherService] Error handling file renamed event for '{e.OldFullPath}' -> '{e.FullPath}': {ex.Message}");
+            _logger.LogError(ex, "Error handling file renamed event for '{OldPath}' -> '{NewPath}'.", e.OldFullPath, e.FullPath);
         }
     }
 
@@ -103,7 +112,7 @@ public class FileWatcherService : IFileWatcherService
     private void OnWatcherError(object sender, ErrorEventArgs e)
     {
         var ex = e.GetException();
-        Trace.TraceError($"[FileWatcherService] FileSystemWatcher error: {ex.Message}");
+        _logger.LogError(ex, "FileSystemWatcher error.");
     }
 
     /// <summary>

@@ -1,5 +1,6 @@
 using System.IO;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using VideoManager.Data;
 using VideoManager.Models;
 using VideoManager.Services;
@@ -146,7 +147,7 @@ public class DeletePropertyTests : IDisposable
 
             var tempDir = CreateTempDir();
             using var context = CreateInMemoryContext();
-            var deleteService = new DeleteService(context);
+            var deleteService = new DeleteService(context, NullLogger<DeleteService>.Instance);
 
             // Setup: create video entry with real files on disk
             var (videoId, videoFilePath, thumbnailFilePath) = SetupVideoEntry(
@@ -205,7 +206,7 @@ public class DeletePropertyTests : IDisposable
 
             var tempDir = CreateTempDir();
             using var context = CreateInMemoryContext();
-            var deleteService = new DeleteService(context);
+            var deleteService = new DeleteService(context, NullLogger<DeleteService>.Instance);
 
             // Setup: create video entry with real files on disk
             var (videoId, videoFilePath, thumbnailFilePath) = SetupVideoEntry(

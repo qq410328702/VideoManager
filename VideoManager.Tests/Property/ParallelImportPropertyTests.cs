@@ -1,5 +1,6 @@
 using System.IO;
 using System.Threading;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Moq;
 using VideoManager.Models;
@@ -101,7 +102,7 @@ public class ParallelImportPropertyTests : IDisposable
 
             var files = CreateSourceFiles(sourceDir, fileCount);
 
-            // Track AddAsync calls
+            // Track AddRangeAsync/AddAsync calls
             var addedCount = 0;
             var addedLock = new object();
 
@@ -115,8 +116,18 @@ public class ParallelImportPropertyTests : IDisposable
                 .Returns<string, string, CancellationToken>((path, outDir, ct) =>
                     Task.FromResult(Path.Combine(outDir, Path.GetFileNameWithoutExtension(path) + ".jpg")));
 
-            // Setup mock VideoRepository - all succeed
+            // Setup mock VideoRepository - batch write succeeds
             var repoMock = new Mock<IVideoRepository>();
+            repoMock.Setup(r => r.AddRangeAsync(It.IsAny<IEnumerable<VideoEntry>>(), It.IsAny<CancellationToken>()))
+                .Returns<IEnumerable<VideoEntry>, CancellationToken>((entries, ct) =>
+                {
+                    var count = entries.Count();
+                    lock (addedLock)
+                    {
+                        addedCount += count;
+                    }
+                    return Task.CompletedTask;
+                });
             repoMock.Setup(r => r.AddAsync(It.IsAny<VideoEntry>(), It.IsAny<CancellationToken>()))
                 .Returns<VideoEntry, CancellationToken>((entry, ct) =>
                 {
@@ -133,7 +144,7 @@ public class ParallelImportPropertyTests : IDisposable
                 ThumbnailDirectory = thumbnailDir
             });
 
-            var importService = new ImportService(ffmpegMock.Object, repoMock.Object, options);
+            var importService = new ImportService(ffmpegMock.Object, repoMock.Object, options, NullLogger<ImportService>.Instance);
 
             // Track progress using a thread-safe list
             var maxCompleted = 0;
