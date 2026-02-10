@@ -65,12 +65,16 @@ public class DebouncePropertyTests
         var searchVm = new SearchViewModel(searchServiceMock.Object);
         var categoryVm = new CategoryViewModel(categoryRepoMock.Object, tagRepoMock.Object);
         var fileWatcherMock = new Mock<IFileWatcherService>();
+        var navigationServiceMock = new Mock<INavigationService>();
+        var dialogServiceMock = new Mock<IDialogService>();
+        var serviceProviderMock = new Mock<IServiceProvider>();
         var options = Options.Create(new VideoManagerOptions
         {
             VideoLibraryPath = "/test/videos",
             ThumbnailDirectory = "/test/thumbnails"
         });
-        var vm = new MainViewModel(videoListVm, searchVm, categoryVm, fileWatcherMock.Object, options);
+        var vm = new MainViewModel(videoListVm, searchVm, categoryVm, fileWatcherMock.Object, options,
+            navigationServiceMock.Object, dialogServiceMock.Object, serviceProviderMock.Object);
 
         return (vm, searchServiceMock, videoRepoMock);
     }
@@ -147,7 +151,7 @@ public class DebouncePropertyTests
             vm.SearchKeyword = keyword;
 
             // Wait for debounce (300ms) + buffer
-            Task.Delay(500).GetAwaiter().GetResult();
+            Task.Delay(800).GetAwaiter().GetResult();
 
             // Verify search was called exactly once with the correct keyword
             searchMock.Verify(

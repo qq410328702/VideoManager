@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using VideoManager.Data;
 using VideoManager.Models;
 using VideoManager.Services;
@@ -137,7 +138,9 @@ public class AsNoTrackingPropertyTests
                 // --- Query 1: AsNoTracking via SearchService (the production path) ---
                 using var asNoTrackingContext = new VideoManagerDbContext(optionsBuilder.Options);
                 asNoTrackingContext.Database.OpenConnection();
-                var searchService = new SearchService(asNoTrackingContext, NullLogger<SearchService>.Instance);
+                var mockMetrics = new Mock<IMetricsService>();
+                mockMetrics.Setup(m => m.StartTimer(It.IsAny<string>())).Returns(new NoOpDisposable());
+                var searchService = new SearchService(asNoTrackingContext, mockMetrics.Object, NullLogger<SearchService>.Instance);
                 var asNoTrackingResult = searchService.SearchAsync(criteria, 1, 1000, CancellationToken.None)
                     .GetAwaiter().GetResult();
 
@@ -202,5 +205,10 @@ public class AsNoTrackingPropertyTests
                 setupContext.Database.CloseConnection();
             }
         });
+    }
+
+    private sealed class NoOpDisposable : IDisposable
+    {
+        public void Dispose() { }
     }
 }

@@ -14,6 +14,9 @@ public class MainViewModelTests
     private readonly Mock<ICategoryRepository> _categoryRepoMock;
     private readonly Mock<ITagRepository> _tagRepoMock;
     private readonly Mock<IFileWatcherService> _fileWatcherMock;
+    private readonly Mock<INavigationService> _navigationServiceMock;
+    private readonly Mock<IDialogService> _dialogServiceMock;
+    private readonly Mock<IServiceProvider> _serviceProviderMock;
     private readonly IOptions<VideoManagerOptions> _options;
 
     public MainViewModelTests()
@@ -23,6 +26,9 @@ public class MainViewModelTests
         _categoryRepoMock = new Mock<ICategoryRepository>();
         _tagRepoMock = new Mock<ITagRepository>();
         _fileWatcherMock = new Mock<IFileWatcherService>();
+        _navigationServiceMock = new Mock<INavigationService>();
+        _dialogServiceMock = new Mock<IDialogService>();
+        _serviceProviderMock = new Mock<IServiceProvider>();
         _options = Options.Create(new VideoManagerOptions
         {
             VideoLibraryPath = "/test/videos",
@@ -35,7 +41,8 @@ public class MainViewModelTests
         var videoListVm = new VideoListViewModel(_videoRepoMock.Object);
         var searchVm = new SearchViewModel(_searchServiceMock.Object);
         var categoryVm = new CategoryViewModel(_categoryRepoMock.Object, _tagRepoMock.Object);
-        return new MainViewModel(videoListVm, searchVm, categoryVm, _fileWatcherMock.Object, _options);
+        return new MainViewModel(videoListVm, searchVm, categoryVm, _fileWatcherMock.Object, _options,
+            _navigationServiceMock.Object, _dialogServiceMock.Object, _serviceProviderMock.Object);
     }
 
     private static PagedResult<VideoEntry> CreatePagedResult(int count, int totalCount, int page, int pageSize)
@@ -79,7 +86,8 @@ public class MainViewModelTests
         var searchVm = new SearchViewModel(_searchServiceMock.Object);
         var categoryVm = new CategoryViewModel(_categoryRepoMock.Object, _tagRepoMock.Object);
 
-        Assert.Throws<ArgumentNullException>(() => new MainViewModel(null!, searchVm, categoryVm, _fileWatcherMock.Object, _options));
+        Assert.Throws<ArgumentNullException>(() => new MainViewModel(null!, searchVm, categoryVm, _fileWatcherMock.Object, _options,
+            _navigationServiceMock.Object, _dialogServiceMock.Object, _serviceProviderMock.Object));
     }
 
     [Fact]
@@ -88,7 +96,8 @@ public class MainViewModelTests
         var videoListVm = new VideoListViewModel(_videoRepoMock.Object);
         var categoryVm = new CategoryViewModel(_categoryRepoMock.Object, _tagRepoMock.Object);
 
-        Assert.Throws<ArgumentNullException>(() => new MainViewModel(videoListVm, null!, categoryVm, _fileWatcherMock.Object, _options));
+        Assert.Throws<ArgumentNullException>(() => new MainViewModel(videoListVm, null!, categoryVm, _fileWatcherMock.Object, _options,
+            _navigationServiceMock.Object, _dialogServiceMock.Object, _serviceProviderMock.Object));
     }
 
     [Fact]
@@ -97,7 +106,8 @@ public class MainViewModelTests
         var videoListVm = new VideoListViewModel(_videoRepoMock.Object);
         var searchVm = new SearchViewModel(_searchServiceMock.Object);
 
-        Assert.Throws<ArgumentNullException>(() => new MainViewModel(videoListVm, searchVm, null!, _fileWatcherMock.Object, _options));
+        Assert.Throws<ArgumentNullException>(() => new MainViewModel(videoListVm, searchVm, null!, _fileWatcherMock.Object, _options,
+            _navigationServiceMock.Object, _dialogServiceMock.Object, _serviceProviderMock.Object));
     }
 
     [Fact]
@@ -298,14 +308,20 @@ public class MainViewModelTests
 
         var vm = CreateViewModel();
 
-        // First set a non-empty keyword to trigger a search
+        // Directly invoke search to simulate keyword "test" search completing
         vm.SearchKeyword = "test";
-        await Task.Delay(500);
+        await vm.SearchCommand.ExecuteAsync(null);
 
-        // Now clear the keyword - this should trigger a refresh (LoadVideos)
+        // Now clear the keyword - this should trigger a refresh (LoadVideos) via debounce
         _videoRepoMock.Invocations.Clear();
         vm.SearchKeyword = "";
-        await Task.Delay(500);
+
+        // Wait for debounced refresh to complete (300ms debounce + execution time)
+        for (int i = 0; i < 30; i++)
+        {
+            await Task.Delay(100);
+            if (_videoRepoMock.Invocations.Count > 0) break;
+        }
 
         // Empty keyword should trigger a refresh (LoadVideos), not a search
         _videoRepoMock.Verify(r => r.GetPagedAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>(), It.IsAny<SortField>(), It.IsAny<SortDirection>()), Times.Once);

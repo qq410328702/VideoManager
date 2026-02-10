@@ -8,11 +8,13 @@ namespace VideoManager.Services;
 public class SearchService : ISearchService
 {
     private readonly VideoManagerDbContext _context;
+    private readonly IMetricsService _metricsService;
     private readonly ILogger<SearchService> _logger;
 
-    public SearchService(VideoManagerDbContext context, ILogger<SearchService> logger)
+    public SearchService(VideoManagerDbContext context, IMetricsService metricsService, ILogger<SearchService> logger)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
+        _metricsService = metricsService ?? throw new ArgumentNullException(nameof(metricsService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -23,6 +25,99 @@ public class SearchService : ISearchService
         if (page < 1) throw new ArgumentOutOfRangeException(nameof(page), "Page must be >= 1.");
         if (pageSize < 1) throw new ArgumentOutOfRangeException(nameof(pageSize), "PageSize must be >= 1.");
 
+        // Record search operation timing
+        using var timer = _metricsService.StartTimer("search");
+
+        var hasKeyword = !string.IsNullOrWhiteSpace(criteria.Keyword);
+        var hasTags = criteria.TagIds is { Count: > 0 };
+        var hasDateFrom = criteria.DateFrom.HasValue;
+        var hasDateTo = criteria.DateTo.HasValue;
+        var hasDurationMin = criteria.DurationMin.HasValue;
+        var hasDurationMax = criteria.DurationMax.HasValue;
+        var hasAnyFilter = hasTags || hasDateFrom || hasDateTo || hasDurationMin || hasDurationMax;
+        var isDefaultSort = criteria.SortBy == SortField.ImportedAt && criteria.SortDir == SortDirection.Descending;
+
+        int skip = (page - 1) * pageSize;
+
+        // Fast path 1: Pure keyword search with default sort (no other filters)
+        if (hasKeyword && !hasAnyFilter && isDefaultSort)
+        {
+            try
+            {
+                var keyword = criteria.Keyword!.Trim();
+                var items = await ToListAsync(
+                    CompiledQueries.SearchByKeyword(_context, keyword, skip, pageSize), ct);
+
+                // For total count, we still need a dynamic query since compiled queries
+                // return IAsyncEnumerable and don't support CountAsync directly
+                var totalCount = await GetKeywordCountAsync(keyword, ct);
+
+                _logger.LogDebug(
+                    "Search executed (compiled query - keyword): Keyword={Keyword}, TotalCount={TotalCount}.",
+                    keyword, totalCount);
+
+                return new PagedResult<VideoEntry>(items, totalCount, page, pageSize);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException
+                                           and not ArgumentException
+                                           and not ArgumentOutOfRangeException)
+            {
+                _logger.LogWarning(ex,
+                    "Compiled query SearchByKeyword failed, falling back to dynamic LINQ.");
+            }
+        }
+
+        // Fast path 2: No filters at all with default sort
+        if (!hasKeyword && !hasAnyFilter && isDefaultSort)
+        {
+            try
+            {
+                var items = await ToListAsync(
+                    CompiledQueries.GetPagedDefault(_context, skip, pageSize), ct);
+
+                var totalCount = await _context.VideoEntries.CountAsync(ct);
+
+                _logger.LogDebug(
+                    "Search executed (compiled query - default paged): TotalCount={TotalCount}.",
+                    totalCount);
+
+                return new PagedResult<VideoEntry>(items, totalCount, page, pageSize);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException
+                                           and not ArgumentException
+                                           and not ArgumentOutOfRangeException)
+            {
+                _logger.LogWarning(ex,
+                    "Compiled query GetPagedDefault failed, falling back to dynamic LINQ.");
+            }
+        }
+
+        // Dynamic LINQ path: multi-condition queries or fallback from compiled query failure
+        return await ExecuteDynamicQueryAsync(criteria, page, pageSize, ct);
+    }
+
+    private async Task<int> GetKeywordCountAsync(string keyword, CancellationToken ct)
+    {
+        return await _context.VideoEntries
+            .AsNoTracking()
+            .Where(v => EF.Functions.Like(v.Title, "%" + keyword + "%") ||
+                        (v.Description != null && EF.Functions.Like(v.Description, "%" + keyword + "%")))
+            .CountAsync(ct);
+    }
+
+    private static async Task<List<T>> ToListAsync<T>(IAsyncEnumerable<T> source, CancellationToken ct)
+    {
+        var list = new List<T>();
+        await foreach (var item in source.WithCancellation(ct))
+        {
+            list.Add(item);
+        }
+        return list;
+    }
+
+    private async Task<PagedResult<VideoEntry>> ExecuteDynamicQueryAsync(
+        SearchCriteria criteria, int page, int pageSize, CancellationToken ct)
+    {
         IQueryable<VideoEntry> query = _context.VideoEntries
             .Include(v => v.Tags)
             .Include(v => v.Categories)

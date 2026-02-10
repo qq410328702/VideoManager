@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
+using VideoManager.Models;
 using VideoManager.Services;
 
 namespace VideoManager.Tests.PropertyTests;
@@ -16,6 +18,11 @@ namespace VideoManager.Tests.PropertyTests;
 /// </summary>
 public class ThumbnailCachePropertyTests
 {
+    private static IOptions<VideoManagerOptions> CreateOptions(int cacheMaxSize = 1000)
+    {
+        return Options.Create(new VideoManagerOptions { ThumbnailCacheMaxSize = cacheMaxSize });
+    }
+
     /// <summary>
     /// Generates a thumbnail cache test scenario as an int array:
     /// [pathSeed, fileExists]
@@ -62,7 +69,7 @@ public class ThumbnailCachePropertyTests
             {
                 Interlocked.Increment(ref callCount);
                 return fileExists;
-            }, NullLogger<ThumbnailCacheService>.Instance);
+            }, CreateOptions(), NullLogger<ThumbnailCacheService>.Instance);
 
             // First call
             var firstResult = service.LoadThumbnailAsync(thumbnailPath)

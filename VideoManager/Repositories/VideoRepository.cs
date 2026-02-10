@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using VideoManager.Data;
 using VideoManager.Models;
 
@@ -7,10 +8,12 @@ namespace VideoManager.Repositories;
 public class VideoRepository : IVideoRepository
 {
     private readonly VideoManagerDbContext _context;
+    private readonly ILogger<VideoRepository> _logger;
 
-    public VideoRepository(VideoManagerDbContext context)
+    public VideoRepository(VideoManagerDbContext context, ILogger<VideoRepository> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     public async Task<VideoEntry> AddAsync(VideoEntry entry, CancellationToken ct)
@@ -55,6 +58,31 @@ public class VideoRepository : IVideoRepository
     {
         var totalCount = await _context.VideoEntries.CountAsync(ct);
 
+        var isDefaultSort = sortBy == SortField.ImportedAt && sortDir == SortDirection.Descending;
+        int skip = (page - 1) * pageSize;
+
+        // Fast path: default sort (ImportedAt Descending) uses compiled query
+        if (isDefaultSort)
+        {
+            try
+            {
+                var items = await ToListAsync(
+                    CompiledQueries.GetPagedDefault(_context, skip, pageSize), ct);
+
+                _logger.LogDebug(
+                    "GetPagedAsync executed (compiled query): Page={Page}, PageSize={PageSize}, TotalCount={TotalCount}.",
+                    page, pageSize, totalCount);
+
+                return new PagedResult<VideoEntry>(items, totalCount, page, pageSize);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex,
+                    "Compiled query GetPagedDefault failed, falling back to dynamic LINQ.");
+            }
+        }
+
+        // Dynamic LINQ path: non-default sort or fallback from compiled query failure
         IQueryable<VideoEntry> query = _context.VideoEntries;
 
         IOrderedQueryable<VideoEntry> orderedQuery = (sortBy, sortDir) switch
@@ -68,14 +96,24 @@ public class VideoRepository : IVideoRepository
             _ => query.OrderByDescending(v => v.ImportedAt)
         };
 
-        var items = await orderedQuery
-            .Skip((page - 1) * pageSize)
+        var dynamicItems = await orderedQuery
+            .Skip(skip)
             .Take(pageSize)
             .Include(v => v.Tags)
             .Include(v => v.Categories)
             .AsNoTracking()
             .ToListAsync(ct);
 
-        return new PagedResult<VideoEntry>(items, totalCount, page, pageSize);
+        return new PagedResult<VideoEntry>(dynamicItems, totalCount, page, pageSize);
+    }
+
+    private static async Task<List<T>> ToListAsync<T>(IAsyncEnumerable<T> source, CancellationToken ct)
+    {
+        var list = new List<T>();
+        await foreach (var item in source.WithCancellation(ct))
+        {
+            list.Add(item);
+        }
+        return list;
     }
 }

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using VideoManager.Data;
 using VideoManager.Models;
+using Microsoft.Extensions.Logging.Abstractions;
 using VideoManager.Repositories;
 
 namespace VideoManager.Tests.PropertyTests;
@@ -42,7 +43,7 @@ public class PaginationPropertyTests
     }
 
     /// <summary>
-    /// **Feature: video-manager, Property 14: 分页查询正确性**
+    /// **Feature: video-manager, Property 14: 分页查询正确�?*
     /// **Validates: Requirements 7.2**
     ///
     /// For any page number and page size, the returned record count should not
@@ -59,7 +60,7 @@ public class PaginationPropertyTests
             int pageSize = config[2];
 
             using var context = CreateInMemoryContext();
-            var videoRepo = new VideoRepository(context);
+            var videoRepo = new VideoRepository(context, NullLogger<VideoRepository>.Instance);
             var ct = CancellationToken.None;
 
             // Insert the generated number of VideoEntry records

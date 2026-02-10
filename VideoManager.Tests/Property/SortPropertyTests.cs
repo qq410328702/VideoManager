@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using VideoManager.Data;
 using VideoManager.Models;
 using VideoManager.Services;
@@ -78,7 +79,9 @@ public class SortPropertyTests
             };
 
             using var context = CreateInMemoryContext();
-            var searchService = new SearchService(context, NullLogger<SearchService>.Instance);
+            var mockMetrics = new Mock<IMetricsService>();
+            mockMetrics.Setup(m => m.StartTimer(It.IsAny<string>())).Returns(new NoOpDisposable());
+            var searchService = new SearchService(context, mockMetrics.Object, NullLogger<SearchService>.Instance);
             var ct = CancellationToken.None;
 
             // --- Setup: create videos with varied properties ---
@@ -155,5 +158,10 @@ public class SortPropertyTests
 
             return true;
         });
+    }
+
+    private sealed class NoOpDisposable : IDisposable
+    {
+        public void Dispose() { }
     }
 }

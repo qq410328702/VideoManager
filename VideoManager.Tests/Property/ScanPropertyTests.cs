@@ -114,6 +114,9 @@ public class ScanPropertyTests
                     createdFiles.Add((fileName, ext, isSupported));
                 }
 
+                var mockMetrics = new Mock<IMetricsService>();
+                mockMetrics.Setup(m => m.StartTimer(It.IsAny<string>())).Returns(new NoOpDisposable());
+
                 // Run the scan
                 var service = new ImportService(
                     new Mock<IFFmpegService>().Object,
@@ -123,6 +126,7 @@ public class ScanPropertyTests
                         VideoLibraryPath = tempDir,
                         ThumbnailDirectory = tempDir
                     }),
+                    mockMetrics.Object,
                     NullLogger<ImportService>.Instance);
                 var result = service.ScanFolderAsync(tempDir, CancellationToken.None)
                     .GetAwaiter().GetResult();
@@ -158,5 +162,10 @@ public class ScanPropertyTests
                 }
             }
         });
+    }
+
+    private sealed class NoOpDisposable : IDisposable
+    {
+        public void Dispose() { }
     }
 }

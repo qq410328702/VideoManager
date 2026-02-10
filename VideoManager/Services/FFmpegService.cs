@@ -11,9 +11,11 @@ public class FFmpegService : IFFmpegService
 
     private readonly string _ffprobePath;
     private readonly string _ffmpegPath;
+    private readonly IMetricsService? _metricsService;
 
-    public FFmpegService(string? ffprobePath = null, string? ffmpegPath = null)
+    public FFmpegService(IMetricsService? metricsService = null, string? ffprobePath = null, string? ffmpegPath = null)
     {
+        _metricsService = metricsService;
         _ffprobePath = ffprobePath ?? "ffprobe";
         _ffmpegPath = ffmpegPath ?? "ffmpeg";
     }
@@ -71,6 +73,9 @@ public class FFmpegService : IFFmpegService
 
         if (string.IsNullOrWhiteSpace(outputDir))
             throw new ArgumentException("Output directory cannot be null or empty.", nameof(outputDir));
+
+        // Record thumbnail generation timing
+        using var timer = _metricsService?.StartTimer("thumbnail_generation");
 
         Directory.CreateDirectory(outputDir);
 
@@ -233,3 +238,4 @@ public class FFmpegService : IFFmpegService
         }
     }
 }
+

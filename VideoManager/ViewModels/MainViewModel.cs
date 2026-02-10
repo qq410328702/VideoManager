@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using VideoManager.Models;
 using VideoManager.Services;
@@ -9,8 +10,10 @@ namespace VideoManager.ViewModels;
 
 /// <summary>
 /// Main ViewModel that coordinates top-level application logic:
-/// search triggering, pagination control, refresh, and status text updates.
-/// Extracted from MainWindow.xaml.cs to follow MVVM pattern.
+/// search triggering, pagination control, refresh, status text updates,
+/// navigation, dialog management, and batch operations.
+/// All business logic is handled here; MainWindow code-behind only retains
+/// window lifecycle management, DataContext binding, and keyboard shortcuts.
 /// </summary>
 public partial class MainViewModel : ViewModelBase
 {
@@ -19,6 +22,9 @@ public partial class MainViewModel : ViewModelBase
     private readonly CategoryViewModel _categoryVm;
     private readonly IFileWatcherService _fileWatcherService;
     private readonly VideoManagerOptions _options;
+    private readonly INavigationService _navigationService;
+    private readonly IDialogService _dialogService;
+    private readonly IServiceProvider _serviceProvider;
 
     /// <summary>
     /// Status text displayed in the bottom toolbar.
@@ -71,20 +77,26 @@ public partial class MainViewModel : ViewModelBase
     public CategoryViewModel CategoryVm => _categoryVm;
 
     /// <summary>
-    /// Creates a new MainViewModel with injected child ViewModels and FileWatcher service.
+    /// Creates a new MainViewModel with injected child ViewModels, services, and FileWatcher service.
     /// </summary>
     public MainViewModel(
         VideoListViewModel videoListVm,
         SearchViewModel searchVm,
         CategoryViewModel categoryVm,
         IFileWatcherService fileWatcherService,
-        IOptions<VideoManagerOptions> options)
+        IOptions<VideoManagerOptions> options,
+        INavigationService navigationService,
+        IDialogService dialogService,
+        IServiceProvider serviceProvider)
     {
         _videoListVm = videoListVm ?? throw new ArgumentNullException(nameof(videoListVm));
         _searchVm = searchVm ?? throw new ArgumentNullException(nameof(searchVm));
         _categoryVm = categoryVm ?? throw new ArgumentNullException(nameof(categoryVm));
         _fileWatcherService = fileWatcherService ?? throw new ArgumentNullException(nameof(fileWatcherService));
         _options = options?.Value ?? throw new ArgumentNullException(nameof(options));
+        _navigationService = navigationService ?? throw new ArgumentNullException(nameof(navigationService));
+        _dialogService = dialogService ?? throw new ArgumentNullException(nameof(dialogService));
+        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
 
         // Subscribe to VideoListViewModel property changes for page info updates
         _videoListVm.PropertyChanged += (_, e) =>
@@ -369,5 +381,350 @@ public partial class MainViewModel : ViewModelBase
     {
         return _videoListVm.Videos.FirstOrDefault(v =>
             string.Equals(v.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+    }
+
+    // ==================== Navigation & Dialog Commands (migrated from MainWindow code-behind) ====================
+
+    /// <summary>
+    /// Opens the video player for the currently selected video.
+    /// Migrated from MainWindow.VideoListControl_VideoDoubleClicked (Req 11.3).
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenVideoPlayerAsync()
+    {
+        if (_videoListVm.SelectedVideo is VideoEntry video)
+        {
+            await _navigationService.OpenVideoPlayerAsync(video);
+        }
+    }
+
+    /// <summary>
+    /// Opens the import dialog and refreshes the video list if videos were imported.
+    /// Migrated from MainWindow.ImportButton_Click (Req 11.3).
+    /// </summary>
+    [RelayCommand]
+    private async Task ImportVideosAsync()
+    {
+        var result = await _navigationService.OpenImportDialogAsync();
+
+        if (result != null && result.SuccessCount > 0)
+        {
+            if (RefreshCommand.CanExecute(null))
+                await RefreshCommand.ExecuteAsync(null);
+        }
+    }
+
+    /// <summary>
+    /// Opens the diagnostics window showing performance metrics, memory usage,
+    /// cache statistics, and backup management (Req 14.4).
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenDiagnosticsAsync()
+    {
+        await _navigationService.OpenDiagnosticsAsync();
+    }
+
+    /// <summary>
+    /// Opens the edit dialog for the currently selected video.
+    /// Migrated from MainWindow.VideoListControl_EditVideoRequested (Req 12.6).
+    /// </summary>
+    [RelayCommand]
+    private async Task EditVideoAsync()
+    {
+        if (_videoListVm.SelectedVideo is not VideoEntry video) return;
+
+        try
+        {
+            await _dialogService.ShowEditDialogAsync(video);
+
+            // Refresh video list after editing to reflect any changes
+            if (RefreshCommand.CanExecute(null))
+                await RefreshCommand.ExecuteAsync(null);
+        }
+        catch (Exception ex)
+        {
+            _dialogService.ShowMessage($"无法打开编辑对话框: {ex.Message}", "错误", MessageLevel.Error);
+        }
+    }
+
+    /// <summary>
+    /// Deletes the currently selected video after confirmation.
+    /// Migrated from MainWindow.VideoListControl_DeleteVideoRequested (Req 12.6).
+    /// </summary>
+    [RelayCommand]
+    private async Task DeleteVideoAsync()
+    {
+        if (_videoListVm.SelectedVideo is not VideoEntry video) return;
+
+        var confirmResult = await _dialogService.ShowDeleteConfirmAsync(video.Title);
+        if (confirmResult is null) return;
+
+        var deleteFile = confirmResult.Value.DeleteFile;
+
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var deleteService = scope.ServiceProvider.GetRequiredService<IDeleteService>();
+
+            var deleteResult = await deleteService.DeleteVideoAsync(video.Id, deleteFile, CancellationToken.None);
+
+            if (deleteResult.Success)
+            {
+                if (deleteResult.ErrorMessage is not null)
+                {
+                    _dialogService.ShowMessage(
+                        $"视频已从库中移除，但文件删除时出现问题：\n{deleteResult.ErrorMessage}",
+                        "部分完成",
+                        MessageLevel.Warning);
+                }
+
+                if (RefreshCommand.CanExecute(null))
+                    await RefreshCommand.ExecuteAsync(null);
+            }
+            else
+            {
+                _dialogService.ShowMessage(
+                    $"删除失败: {deleteResult.ErrorMessage}",
+                    "错误",
+                    MessageLevel.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            _dialogService.ShowMessage($"删除失败: {ex.Message}", "错误", MessageLevel.Error);
+        }
+    }
+
+    /// <summary>
+    /// Batch deletes selected videos after confirmation.
+    /// Creates a backup before executing the batch delete (Req 8.3).
+    /// Migrated from MainWindow.VideoListControl_BatchDeleteRequested (Req 12.6).
+    /// </summary>
+    [RelayCommand]
+    private async Task BatchDeleteAsync()
+    {
+        var videoListVm = _videoListVm;
+        var selectedIds = videoListVm.GetSelectedVideoIds();
+        if (selectedIds.Count == 0) return;
+
+        var confirmResult = await _dialogService.ShowBatchDeleteConfirmAsync(selectedIds.Count);
+        if (confirmResult is null) return;
+
+        var deleteFiles = confirmResult.Value.DeleteFile;
+
+        var ct = videoListVm.BeginBatchOperation();
+        videoListVm.BatchProgressText = "正在批量删除...";
+
+        try
+        {
+            // Create backup before batch delete (Req 8.3)
+            try
+            {
+                var backupService = _serviceProvider.GetRequiredService<IBackupService>();
+                videoListVm.BatchProgressText = "正在创建备份...";
+                await backupService.CreateBackupAsync(CancellationToken.None);
+            }
+            catch (Exception backupEx)
+            {
+                // Log but don't block the delete operation
+                Trace.TraceWarning($"Pre-delete backup failed: {backupEx.Message}");
+            }
+
+            videoListVm.BatchProgressText = "正在批量删除...";
+
+            using var scope = _serviceProvider.CreateScope();
+            var deleteService = scope.ServiceProvider.GetRequiredService<IDeleteService>();
+
+            var estimator = new ProgressEstimator(selectedIds.Count);
+            var lastReportedCompleted = 0;
+
+            var progress = new Progress<BatchProgress>(p =>
+            {
+                // Record completions in the estimator for each newly completed item
+                var newlyCompleted = p.Completed - lastReportedCompleted;
+                for (var i = 0; i < newlyCompleted; i++)
+                {
+                    estimator.RecordCompletion();
+                }
+                lastReportedCompleted = p.Completed;
+
+                videoListVm.BatchProgressPercentage = estimator.ProgressPercentage;
+                videoListVm.BatchProgressText = $"正在删除... ({p.Completed}/{p.Total})";
+                videoListVm.BatchEstimatedTimeRemaining = VideoListViewModel.FormatTimeRemaining(estimator.EstimatedTimeRemaining);
+            });
+
+            var deleteResult = await deleteService.BatchDeleteAsync(selectedIds, deleteFiles, progress, ct);
+
+            // Show result summary (Req 6.5)
+            var summaryMessage = $"批量删除完成\n\n成功: {deleteResult.SuccessCount} 个\n失败: {deleteResult.FailCount} 个";
+            if (deleteResult.Errors.Count > 0)
+            {
+                summaryMessage += "\n\n失败详情:\n" + string.Join("\n",
+                    deleteResult.Errors.Select(err => $"  视频 {err.VideoId}: {err.Reason}"));
+            }
+
+            _dialogService.ShowMessage(summaryMessage, "批量删除结果",
+                deleteResult.FailCount > 0 ? MessageLevel.Warning : MessageLevel.Information);
+
+            // Refresh video list after deletion
+            if (RefreshCommand.CanExecute(null))
+                await RefreshCommand.ExecuteAsync(null);
+        }
+        catch (OperationCanceledException)
+        {
+            _dialogService.ShowMessage("批量删除已取消。已完成的删除操作不会回滚。", "已取消", MessageLevel.Information);
+
+            // Refresh to reflect any items that were already deleted
+            if (RefreshCommand.CanExecute(null))
+                await RefreshCommand.ExecuteAsync(null);
+        }
+        catch (Exception ex)
+        {
+            _dialogService.ShowMessage($"批量删除失败: {ex.Message}", "错误", MessageLevel.Error);
+        }
+        finally
+        {
+            videoListVm.EndBatchOperation();
+        }
+    }
+
+    /// <summary>
+    /// Batch adds tags to selected videos.
+    /// Migrated from MainWindow.VideoListControl_BatchTagRequested (Req 12.6).
+    /// </summary>
+    [RelayCommand]
+    private async Task BatchTagAsync()
+    {
+        var videoListVm = _videoListVm;
+        var selectedIds = videoListVm.GetSelectedVideoIds();
+        if (selectedIds.Count == 0) return;
+
+        var availableTags = _categoryVm.Tags;
+        if (availableTags.Count == 0)
+        {
+            _dialogService.ShowMessage("没有可用的标签。请先在分类面板中创建标签。", "提示", MessageLevel.Information);
+            return;
+        }
+
+        var selectedTags = await _dialogService.ShowBatchTagDialogAsync(availableTags, selectedIds.Count);
+        if (selectedTags is null) return;
+
+        var ct = videoListVm.BeginBatchOperation();
+        videoListVm.BatchProgressText = "正在批量添加标签...";
+
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var editService = scope.ServiceProvider.GetRequiredService<IEditService>();
+
+            var totalOps = selectedTags.Count;
+            var estimator = new ProgressEstimator(totalOps);
+            var completedOps = 0;
+
+            foreach (var tag in selectedTags)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                await editService.BatchAddTagAsync(selectedIds, tag.Id, ct);
+                completedOps++;
+                estimator.RecordCompletion();
+
+                videoListVm.BatchProgressPercentage = estimator.ProgressPercentage;
+                videoListVm.BatchProgressText = $"正在添加标签... ({completedOps}/{totalOps})";
+                videoListVm.BatchEstimatedTimeRemaining = VideoListViewModel.FormatTimeRemaining(estimator.EstimatedTimeRemaining);
+            }
+
+            // Show result summary (Req 6.5)
+            _dialogService.ShowMessage(
+                $"批量标签添加完成\n\n已为 {selectedIds.Count} 个视频添加了 {selectedTags.Count} 个标签",
+                "批量标签结果",
+                MessageLevel.Information);
+
+            // Refresh video list
+            if (RefreshCommand.CanExecute(null))
+                await RefreshCommand.ExecuteAsync(null);
+        }
+        catch (OperationCanceledException)
+        {
+            _dialogService.ShowMessage("批量标签添加已取消。已完成的标签操作不会回滚。", "已取消", MessageLevel.Information);
+
+            // Refresh to reflect any tags that were already added
+            if (RefreshCommand.CanExecute(null))
+                await RefreshCommand.ExecuteAsync(null);
+        }
+        catch (Exception ex)
+        {
+            _dialogService.ShowMessage($"批量标签添加失败: {ex.Message}", "错误", MessageLevel.Error);
+        }
+        finally
+        {
+            videoListVm.EndBatchOperation();
+        }
+    }
+
+    /// <summary>
+    /// Batch moves selected videos to a category.
+    /// Migrated from MainWindow.VideoListControl_BatchCategoryRequested (Req 12.6).
+    /// </summary>
+    [RelayCommand]
+    private async Task BatchCategoryAsync()
+    {
+        var videoListVm = _videoListVm;
+        var selectedIds = videoListVm.GetSelectedVideoIds();
+        if (selectedIds.Count == 0) return;
+
+        var categories = _categoryVm.Categories;
+        if (categories.Count == 0)
+        {
+            _dialogService.ShowMessage("没有可用的分类。请先在分类面板中创建分类。", "提示", MessageLevel.Information);
+            return;
+        }
+
+        var selectedCategory = await _dialogService.ShowBatchCategoryDialogAsync(categories, selectedIds.Count);
+        if (selectedCategory is null) return;
+
+        var ct = videoListVm.BeginBatchOperation();
+        videoListVm.BatchProgressText = "正在批量移动到分类...";
+
+        try
+        {
+            using var scope = _serviceProvider.CreateScope();
+            var editService = scope.ServiceProvider.GetRequiredService<IEditService>();
+
+            // BatchMoveToCategoryAsync is a single operation, but we still use ProgressEstimator
+            // to show progress for the overall operation
+            var estimator = new ProgressEstimator(1);
+
+            await editService.BatchMoveToCategoryAsync(selectedIds, selectedCategory.Id, ct);
+
+            estimator.RecordCompletion();
+            videoListVm.BatchProgressPercentage = 100;
+
+            // Show result summary (Req 6.5)
+            _dialogService.ShowMessage(
+                $"批量分类移动完成\n\n已将 {selectedIds.Count} 个视频移动到分类 \"{selectedCategory.Name}\"",
+                "批量分类结果",
+                MessageLevel.Information);
+
+            // Refresh video list
+            if (RefreshCommand.CanExecute(null))
+                await RefreshCommand.ExecuteAsync(null);
+        }
+        catch (OperationCanceledException)
+        {
+            _dialogService.ShowMessage("批量分类移动已取消。已完成的分类操作不会回滚。", "已取消", MessageLevel.Information);
+
+            // Refresh to reflect any changes that were already made
+            if (RefreshCommand.CanExecute(null))
+                await RefreshCommand.ExecuteAsync(null);
+        }
+        catch (Exception ex)
+        {
+            _dialogService.ShowMessage($"批量分类移动失败: {ex.Message}", "错误", MessageLevel.Error);
+        }
+        finally
+        {
+            videoListVm.EndBatchOperation();
+        }
     }
 }

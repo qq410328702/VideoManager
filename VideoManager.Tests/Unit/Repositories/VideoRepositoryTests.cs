@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using VideoManager.Data;
 using VideoManager.Models;
 using VideoManager.Repositories;
@@ -38,7 +39,7 @@ public class VideoRepositoryTests
     public async Task AddAsync_ShouldPersistEntryAndAssignId()
     {
         using var context = CreateInMemoryContext();
-        var repo = new VideoRepository(context);
+        var repo = new VideoRepository(context, NullLogger<VideoRepository>.Instance);
         var entry = CreateSampleEntry();
 
         var result = await repo.AddAsync(entry, CancellationToken.None);
@@ -52,7 +53,7 @@ public class VideoRepositoryTests
     public async Task GetByIdAsync_ShouldReturnEntryWithTagsAndCategories()
     {
         using var context = CreateInMemoryContext();
-        var repo = new VideoRepository(context);
+        var repo = new VideoRepository(context, NullLogger<VideoRepository>.Instance);
         var entry = CreateSampleEntry();
         entry.Tags.Add(new Tag { Name = "Action" });
         entry.Categories.Add(new FolderCategory { Name = "Movies" });
@@ -70,7 +71,7 @@ public class VideoRepositoryTests
     public async Task GetByIdAsync_ShouldReturnNullForNonExistentId()
     {
         using var context = CreateInMemoryContext();
-        var repo = new VideoRepository(context);
+        var repo = new VideoRepository(context, NullLogger<VideoRepository>.Instance);
 
         var result = await repo.GetByIdAsync(999, CancellationToken.None);
 
@@ -81,7 +82,7 @@ public class VideoRepositoryTests
     public async Task UpdateAsync_ShouldPersistChanges()
     {
         using var context = CreateInMemoryContext();
-        var repo = new VideoRepository(context);
+        var repo = new VideoRepository(context, NullLogger<VideoRepository>.Instance);
         var entry = CreateSampleEntry();
         await repo.AddAsync(entry, CancellationToken.None);
 
@@ -99,7 +100,7 @@ public class VideoRepositoryTests
     public async Task DeleteAsync_ShouldRemoveEntry()
     {
         using var context = CreateInMemoryContext();
-        var repo = new VideoRepository(context);
+        var repo = new VideoRepository(context, NullLogger<VideoRepository>.Instance);
         var entry = CreateSampleEntry();
         await repo.AddAsync(entry, CancellationToken.None);
 
@@ -114,7 +115,7 @@ public class VideoRepositoryTests
     public async Task DeleteAsync_ShouldDoNothingForNonExistentId()
     {
         using var context = CreateInMemoryContext();
-        var repo = new VideoRepository(context);
+        var repo = new VideoRepository(context, NullLogger<VideoRepository>.Instance);
 
         // Should not throw
         await repo.DeleteAsync(999, CancellationToken.None);
@@ -124,7 +125,7 @@ public class VideoRepositoryTests
     public async Task GetPagedAsync_ShouldReturnCorrectPage()
     {
         using var context = CreateInMemoryContext();
-        var repo = new VideoRepository(context);
+        var repo = new VideoRepository(context, NullLogger<VideoRepository>.Instance);
 
         // Add 5 entries with distinct ImportedAt so default descending sort is deterministic
         var baseDate = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -151,7 +152,7 @@ public class VideoRepositoryTests
     public async Task GetPagedAsync_LastPageShouldReturnRemainingItems()
     {
         using var context = CreateInMemoryContext();
-        var repo = new VideoRepository(context);
+        var repo = new VideoRepository(context, NullLogger<VideoRepository>.Instance);
 
         var baseDate = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         for (int i = 1; i <= 5; i++)
@@ -176,7 +177,7 @@ public class VideoRepositoryTests
     public async Task GetPagedAsync_EmptyDatabase_ShouldReturnEmptyResult()
     {
         using var context = CreateInMemoryContext();
-        var repo = new VideoRepository(context);
+        var repo = new VideoRepository(context, NullLogger<VideoRepository>.Instance);
 
         var result = await repo.GetPagedAsync(page: 1, pageSize: 10, CancellationToken.None);
 
@@ -190,7 +191,7 @@ public class VideoRepositoryTests
     public async Task GetPagedAsync_PageBeyondData_ShouldReturnEmptyItems()
     {
         using var context = CreateInMemoryContext();
-        var repo = new VideoRepository(context);
+        var repo = new VideoRepository(context, NullLogger<VideoRepository>.Instance);
 
         await repo.AddAsync(CreateSampleEntry(), CancellationToken.None);
 

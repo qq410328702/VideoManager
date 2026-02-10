@@ -200,6 +200,7 @@
 
                 <StackPanel Grid.Column="0" Orientation="Horizontal">
                     <Button x:Name="ImportButton"
+                            Command="{Binding ImportVideosCommand}"
                             Style="{StaticResource MaterialDesignRaisedButton}"
                             ToolTip="导入视频"
                             Margin="0,0,8,0">
@@ -228,6 +229,12 @@
                            FontSize="12"/>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <Button x:Name="DiagnosticsButton"
+                            Command="{Binding OpenDiagnosticsCommand}"
+                            Style="{StaticResource MaterialDesignIconButton}"
+                            ToolTip="诊断统计">
+                        <md:PackIcon Kind="ChartBox" Width="22" Height="22"/>
+                    </Button>
                     <Button x:Name="SettingsButton"
                             Style="{StaticResource MaterialDesignIconButton}"
                             ToolTip="设置">

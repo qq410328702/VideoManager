@@ -2,6 +2,7 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using VideoManager.Data;
 using VideoManager.Models;
+using Microsoft.Extensions.Logging.Abstractions;
 using VideoManager.Repositories;
 
 namespace VideoManager.Tests.Unit.Services;
@@ -25,7 +26,7 @@ public class VideoRepositoryBatchTests : IDisposable
             .Options;
         _context = new VideoManagerDbContext(options);
         _context.Database.EnsureCreated();
-        _repository = new VideoRepository(_context);
+        _repository = new VideoRepository(_context, NullLogger<VideoRepository>.Instance);
     }
 
     public void Dispose()
@@ -75,7 +76,7 @@ public class VideoRepositoryBatchTests : IDisposable
         // Arrange
         var entries = new List<VideoEntry>();
 
-        // Act & Assert â€” should complete without throwing
+        // Act & Assert â€?should complete without throwing
         await _repository.AddRangeAsync(entries, CancellationToken.None);
 
         var count = await _context.VideoEntries.CountAsync();
@@ -97,7 +98,7 @@ public class VideoRepositoryBatchTests : IDisposable
         // Act
         await _repository.AddRangeAsync(entries, CancellationToken.None);
 
-        // Assert â€” query back and verify data integrity
+        // Assert â€?query back and verify data integrity
         var stored = await _context.VideoEntries
             .OrderBy(v => v.Title)
             .ToListAsync();
@@ -134,7 +135,7 @@ public class VideoRepositoryBatchTests : IDisposable
         // Act
         await _repository.AddRangeAsync(entries, CancellationToken.None);
 
-        // Assert â€” all 10 records should be present after the single batch call
+        // Assert â€?all 10 records should be present after the single batch call
         var count = await _context.VideoEntries.CountAsync();
         Assert.Equal(10, count);
 

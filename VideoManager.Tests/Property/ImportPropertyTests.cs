@@ -190,7 +190,10 @@ public class ImportPropertyTests : IDisposable
 
             // Use real SQLite In-Memory database
             using var context = CreateInMemoryContext();
-            var videoRepo = new VideoRepository(context);
+            var videoRepo = new VideoRepository(context, NullLogger<VideoRepository>.Instance);
+
+            var mockMetrics1 = new Mock<IMetricsService>();
+            mockMetrics1.Setup(m => m.StartTimer(It.IsAny<string>())).Returns(new NoOpDisposable());
 
             var importService = new ImportService(
                 mockFfmpeg.Object,
@@ -200,6 +203,7 @@ public class ImportPropertyTests : IDisposable
                     VideoLibraryPath = videoLibraryDir,
                     ThumbnailDirectory = thumbnailDir
                 }),
+                mockMetrics1.Object,
                 NullLogger<ImportService>.Instance);
 
             // Execute import
@@ -280,7 +284,10 @@ public class ImportPropertyTests : IDisposable
 
             // Use real SQLite In-Memory database and VideoRepository
             using var context = CreateInMemoryContext();
-            var videoRepo = new VideoRepository(context);
+            var videoRepo = new VideoRepository(context, NullLogger<VideoRepository>.Instance);
+
+            var mockMetrics2 = new Mock<IMetricsService>();
+            mockMetrics2.Setup(m => m.StartTimer(It.IsAny<string>())).Returns(new NoOpDisposable());
 
             // Create ImportService with real repo and mocked FFmpeg
             var importService = new ImportService(
@@ -291,6 +298,7 @@ public class ImportPropertyTests : IDisposable
                     VideoLibraryPath = videoLibraryDir,
                     ThumbnailDirectory = thumbnailDir
                 }),
+                mockMetrics2.Object,
                 NullLogger<ImportService>.Instance);
 
             // Execute import
@@ -332,7 +340,7 @@ public class ImportPropertyTests : IDisposable
     }
 
     /// <summary>
-    /// **Feature: video-manager, Property 4: 重名文件自动重命名**
+    /// **Feature: video-manager, Property 4: 重名文件自动重命�?*
     /// **Validates: Requirements 1.7**
     ///
     /// For any two files with the same name, after importing both sequentially,
@@ -386,7 +394,10 @@ public class ImportPropertyTests : IDisposable
 
             // Use real SQLite In-Memory database
             using var context = CreateInMemoryContext();
-            var videoRepo = new VideoRepository(context);
+            var videoRepo = new VideoRepository(context, NullLogger<VideoRepository>.Instance);
+
+            var mockMetrics3 = new Mock<IMetricsService>();
+            mockMetrics3.Setup(m => m.StartTimer(It.IsAny<string>())).Returns(new NoOpDisposable());
 
             var importService = new ImportService(
                 mockFfmpeg.Object,
@@ -396,6 +407,7 @@ public class ImportPropertyTests : IDisposable
                     VideoLibraryPath = videoLibraryDir,
                     ThumbnailDirectory = thumbnailDir
                 }),
+                mockMetrics3.Object,
                 NullLogger<ImportService>.Instance);
 
             // Import first file
@@ -449,4 +461,8 @@ public class ImportPropertyTests : IDisposable
         });
     }
 
+    private sealed class NoOpDisposable : IDisposable
+    {
+        public void Dispose() { }
+    }
 }

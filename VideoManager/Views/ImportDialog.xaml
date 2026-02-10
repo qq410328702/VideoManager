@@ -249,14 +249,19 @@
                          Minimum="0" Maximum="100"
                          Height="8"
                          md:TransitionAssist.DisableTransitions="True"/>
-            <TextBlock HorizontalAlignment="Right"
-                       Margin="0,4,0,0"
-                       FontSize="12"
-                       Foreground="{DynamicResource MaterialDesignBodyLight}">
-                <TextBlock.Text>
-                    <Binding Path="Progress" StringFormat="{}{0:F0}%"/>
-                </TextBlock.Text>
-            </TextBlock>
+            <Grid Margin="0,4,0,0">
+                <TextBlock HorizontalAlignment="Left"
+                           FontSize="12"
+                           Text="{Binding EstimatedTimeRemaining}"
+                           Foreground="{DynamicResource MaterialDesignBodyLight}"/>
+                <TextBlock HorizontalAlignment="Right"
+                           FontSize="12"
+                           Foreground="{DynamicResource MaterialDesignBodyLight}">
+                    <TextBlock.Text>
+                        <Binding Path="Progress" StringFormat="{}{0:F0}%"/>
+                    </TextBlock.Text>
+                </TextBlock>
+            </Grid>
         </StackPanel>
 
         <!-- ==================== Status Message ==================== -->

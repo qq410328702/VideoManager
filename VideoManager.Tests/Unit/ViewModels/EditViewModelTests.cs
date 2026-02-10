@@ -270,7 +270,7 @@ public class EditViewModelTests
         await vm.SaveCommand.ExecuteAsync(null);
 
         Assert.True(vm.HasError);
-        Assert.Equal("Title cannot be empty.", vm.ErrorMessage);
+        Assert.Equal("保存失败: Title cannot be empty.", vm.ErrorMessage);
     }
 
     [Fact]
@@ -290,7 +290,7 @@ public class EditViewModelTests
         await vm.SaveCommand.ExecuteAsync(null);
 
         Assert.True(vm.HasError);
-        Assert.Equal("Video not found.", vm.ErrorMessage);
+        Assert.Equal("保存失败: Video not found.", vm.ErrorMessage);
     }
 
     [Fact]

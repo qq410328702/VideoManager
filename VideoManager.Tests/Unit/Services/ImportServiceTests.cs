@@ -15,6 +15,7 @@ public class ImportServiceTests : IDisposable
     private readonly string _thumbnailDir;
     private readonly Mock<IFFmpegService> _mockFfmpeg;
     private readonly Mock<IVideoRepository> _mockVideoRepo;
+    private readonly Mock<IMetricsService> _mockMetrics;
     private readonly ImportService _service;
 
     public ImportServiceTests()
@@ -29,6 +30,11 @@ public class ImportServiceTests : IDisposable
 
         _mockFfmpeg = new Mock<IFFmpegService>();
         _mockVideoRepo = new Mock<IVideoRepository>();
+        _mockMetrics = new Mock<IMetricsService>();
+
+        // Default: StartTimer returns a no-op disposable
+        _mockMetrics.Setup(m => m.StartTimer(It.IsAny<string>()))
+            .Returns(new NoOpDisposable());
 
         // Default: metadata extraction returns valid metadata
         _mockFfmpeg.Setup(f => f.ExtractMetadataAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -59,7 +65,7 @@ public class ImportServiceTests : IDisposable
         {
             VideoLibraryPath = _videoLibraryDir,
             ThumbnailDirectory = _thumbnailDir
-        }), NullLogger<ImportService>.Instance);
+        }), _mockMetrics.Object, NullLogger<ImportService>.Instance);
     }
 
     public void Dispose()
@@ -604,4 +610,12 @@ public class ImportServiceTests : IDisposable
     }
 
     #endregion
+
+    /// <summary>
+    /// Simple no-op disposable for mocking IMetricsService.StartTimer.
+    /// </summary>
+    private sealed class NoOpDisposable : IDisposable
+    {
+        public void Dispose() { }
+    }
 }

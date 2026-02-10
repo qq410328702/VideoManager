@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using VideoManager.Data;
 using VideoManager.Models;
 using VideoManager.Services;
@@ -69,7 +70,9 @@ public class SearchPropertyTests
             int seed = config[5];
 
             using var context = CreateInMemoryContext();
-            var searchService = new SearchService(context, NullLogger<SearchService>.Instance);
+            var mockMetrics = new Mock<IMetricsService>();
+            mockMetrics.Setup(m => m.StartTimer(It.IsAny<string>())).Returns(new NoOpDisposable());
+            var searchService = new SearchService(context, mockMetrics.Object, NullLogger<SearchService>.Instance);
             var ct = CancellationToken.None;
 
             // --- Setup: create tags ---
@@ -235,5 +238,10 @@ public class SearchPropertyTests
 
             return totalCountCorrect && itemCountCorrect && idsMatch;
         });
+    }
+
+    private sealed class NoOpDisposable : IDisposable
+    {
+        public void Dispose() { }
     }
 }

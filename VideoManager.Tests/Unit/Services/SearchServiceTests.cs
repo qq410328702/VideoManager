@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using VideoManager.Data;
 using VideoManager.Models;
 using VideoManager.Services;
@@ -19,7 +20,9 @@ public class SearchServiceTests : IDisposable
         _context = new VideoManagerDbContext(options);
         _context.Database.OpenConnection();
         _context.Database.EnsureCreated();
-        _service = new SearchService(_context, NullLogger<SearchService>.Instance);
+        var mockMetrics = new Mock<IMetricsService>();
+        mockMetrics.Setup(m => m.StartTimer(It.IsAny<string>())).Returns(new NoOpDisposable());
+        _service = new SearchService(_context, mockMetrics.Object, NullLogger<SearchService>.Instance);
     }
 
     public void Dispose()
@@ -513,4 +516,9 @@ public class SearchServiceTests : IDisposable
     }
 
     #endregion
+
+    private sealed class NoOpDisposable : IDisposable
+    {
+        public void Dispose() { }
+    }
 }

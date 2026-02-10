@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using VideoManager.Models;
 using VideoManager.Repositories;
+using VideoManager.Services;
 
 namespace VideoManager.ViewModels;
 
@@ -66,6 +67,7 @@ public partial class VideoListViewModel : ViewModelBase
     /// Whether a batch operation is currently in progress.
     /// </summary>
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CancelBatchCommand))]
     private bool _isBatchOperating;
 
     /// <summary>
@@ -73,6 +75,78 @@ public partial class VideoListViewModel : ViewModelBase
     /// </summary>
     [ObservableProperty]
     private string _batchProgressText = string.Empty;
+
+    /// <summary>
+    /// Progress percentage for batch operations (0-100).
+    /// </summary>
+    [ObservableProperty]
+    private double _batchProgressPercentage;
+
+    /// <summary>
+    /// Estimated time remaining text for batch operations.
+    /// </summary>
+    [ObservableProperty]
+    private string _batchEstimatedTimeRemaining = string.Empty;
+
+    /// <summary>
+    /// CancellationTokenSource for the current batch operation.
+    /// </summary>
+    private CancellationTokenSource? _batchCancellationTokenSource;
+
+    /// <summary>
+    /// Gets a CancellationToken for the current batch operation.
+    /// Creates a new CancellationTokenSource if one doesn't exist.
+    /// </summary>
+    public CancellationToken BeginBatchOperation()
+    {
+        _batchCancellationTokenSource?.Dispose();
+        _batchCancellationTokenSource = new CancellationTokenSource();
+        IsBatchOperating = true;
+        BatchProgressText = string.Empty;
+        BatchProgressPercentage = 0;
+        BatchEstimatedTimeRemaining = string.Empty;
+        return _batchCancellationTokenSource.Token;
+    }
+
+    /// <summary>
+    /// Ends the current batch operation and cleans up resources.
+    /// </summary>
+    public void EndBatchOperation()
+    {
+        IsBatchOperating = false;
+        BatchProgressText = string.Empty;
+        BatchProgressPercentage = 0;
+        BatchEstimatedTimeRemaining = string.Empty;
+        _batchCancellationTokenSource?.Dispose();
+        _batchCancellationTokenSource = null;
+    }
+
+    /// <summary>
+    /// Cancels the current batch operation.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanCancelBatch))]
+    private void CancelBatch()
+    {
+        _batchCancellationTokenSource?.Cancel();
+    }
+
+    private bool CanCancelBatch() => IsBatchOperating;
+
+    /// <summary>
+    /// Formats a TimeSpan into a human-readable remaining time string.
+    /// </summary>
+    internal static string FormatTimeRemaining(TimeSpan? timeRemaining)
+    {
+        if (timeRemaining is null)
+            return string.Empty;
+
+        var ts = timeRemaining.Value;
+        if (ts.TotalHours >= 1)
+            return $"预计剩余 {(int)ts.TotalHours}:{ts.Minutes:D2}:{ts.Seconds:D2}";
+        if (ts.TotalMinutes >= 1)
+            return $"预计剩余 {(int)ts.TotalMinutes}:{ts.Seconds:D2}";
+        return $"预计剩余 {(int)ts.TotalSeconds} 秒";
+    }
 
     /// <summary>
     /// Current sort field used when loading videos.

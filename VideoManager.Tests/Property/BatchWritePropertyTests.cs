@@ -2,13 +2,14 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using VideoManager.Data;
 using VideoManager.Models;
+using Microsoft.Extensions.Logging.Abstractions;
 using VideoManager.Repositories;
 
 namespace VideoManager.Tests.PropertyTests;
 
 /// <summary>
 /// Property-based tests for batch write consistency via AddRangeAsync.
-/// **Feature: video-manager-optimization-v2, Property 4: 批量写入一致性**
+/// **Feature: video-manager-optimization-v2, Property 4: 批量写入一致�?*
 /// **Validates: Requirements 5.2, 5.3**
 ///
 /// For any VideoEntry list (1-50 items), after batch writing via AddRangeAsync,
@@ -37,7 +38,7 @@ public class BatchWritePropertyTests
     }
 
     /// <summary>
-    /// **Feature: video-manager-optimization-v2, Property 4: 批量写入一致性**
+    /// **Feature: video-manager-optimization-v2, Property 4: 批量写入一致�?*
     /// **Validates: Requirements 5.2, 5.3**
     ///
     /// For any count n in [1, 50], creating n VideoEntry objects with unique titles
@@ -66,7 +67,7 @@ public class BatchWritePropertyTests
                 using var context = new VideoManagerDbContext(options);
                 context.Database.EnsureCreated();
 
-                var repository = new VideoRepository(context);
+                var repository = new VideoRepository(context, NullLogger<VideoRepository>.Instance);
 
                 // Create n VideoEntry objects with unique titles and filenames
                 var entries = new List<VideoEntry>();

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using VideoManager.Data;
 using VideoManager.Models;
+using Microsoft.Extensions.Logging.Abstractions;
 using VideoManager.Repositories;
 
 namespace VideoManager.Tests.PropertyTests;
@@ -176,7 +177,7 @@ public class CategoryPropertyTests
     }
 
     /// <summary>
-    /// **Feature: video-manager, Property 8: 分类树 round-trip**
+    /// **Feature: video-manager, Property 8: 分类�?round-trip**
     /// **Validates: Requirements 3.4**
     ///
     /// For any multi-level nested FolderCategory tree structure, after creating it
@@ -230,7 +231,7 @@ public class CategoryPropertyTests
     }
 
     /// <summary>
-    /// **Feature: video-manager, Property 9: 多分类关联**
+    /// **Feature: video-manager, Property 9: 多分类关�?*
     /// **Validates: Requirements 3.5**
     ///
     /// For any VideoEntry and multiple FolderCategories, after adding the VideoEntry
@@ -247,7 +248,7 @@ public class CategoryPropertyTests
         return FsCheck.Fluent.Prop.ForAll(arb, categoryCount =>
         {
             using var context = CreateInMemoryContext();
-            var videoRepo = new VideoRepository(context);
+            var videoRepo = new VideoRepository(context, NullLogger<VideoRepository>.Instance);
             var categoryRepo = new CategoryRepository(context);
             var ct = CancellationToken.None;
 
@@ -339,7 +340,7 @@ public class CategoryPropertyTests
             int seed = config[2];
 
             using var context = CreateInMemoryContext();
-            var videoRepo = new VideoRepository(context);
+            var videoRepo = new VideoRepository(context, NullLogger<VideoRepository>.Instance);
             var categoryRepo = new CategoryRepository(context);
             var tagRepo = new TagRepository(context);
             var ct = CancellationToken.None;

@@ -53,10 +53,14 @@ public class ImportServiceRetryTests : IDisposable
             ThumbnailDirectory = _thumbnailDir
         });
 
+        var mockMetrics = new Mock<IMetricsService>();
+        mockMetrics.Setup(m => m.StartTimer(It.IsAny<string>())).Returns(new NoOpDisposable());
+
         _service = new ImportService(
             _mockFfmpeg.Object,
             _mockRepo.Object,
             options,
+            mockMetrics.Object,
             NullLogger<ImportService>.Instance);
     }
 
@@ -233,4 +237,9 @@ public class ImportServiceRetryTests : IDisposable
     }
 
     #endregion
+
+    private sealed class NoOpDisposable : IDisposable
+    {
+        public void Dispose() { }
+    }
 }

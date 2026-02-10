@@ -343,7 +343,11 @@ public class VideoListViewModelTests
         await vm.LoadVideosCommand.ExecuteAsync(null);
 
         // Give thumbnail loading a moment to complete (it's fire-and-forget)
-        await Task.Delay(500);
+        // Use a retry loop to handle scheduling delays in loaded test environments
+        for (int i = 0; i < 20 && loadedPaths.Count < 2; i++)
+        {
+            await Task.Delay(100);
+        }
 
         Assert.Contains("/thumbs/t1.jpg", loadedPaths);
         Assert.Contains("/thumbs/t2.jpg", loadedPaths);
@@ -626,6 +630,125 @@ public class VideoListViewModelTests
 
         Assert.Empty(vm.SelectedVideos);
         Assert.False(vm.HasMultipleSelection);
+    }
+
+    #endregion
+
+    #region Batch Operation Cancel & Progress
+
+    [Fact]
+    public void BeginBatchOperation_SetsIsBatchOperatingAndReturnsCancellationToken()
+    {
+        var vm = CreateViewModel();
+
+        var ct = vm.BeginBatchOperation();
+
+        Assert.True(vm.IsBatchOperating);
+        Assert.False(ct.IsCancellationRequested);
+        Assert.Equal(string.Empty, vm.BatchProgressText);
+        Assert.Equal(0, vm.BatchProgressPercentage);
+        Assert.Equal(string.Empty, vm.BatchEstimatedTimeRemaining);
+
+        vm.EndBatchOperation();
+    }
+
+    [Fact]
+    public void EndBatchOperation_ResetsAllBatchProperties()
+    {
+        var vm = CreateViewModel();
+        vm.BeginBatchOperation();
+        vm.BatchProgressText = "正在删除...";
+        vm.BatchProgressPercentage = 50;
+        vm.BatchEstimatedTimeRemaining = "预计剩余 30 秒";
+
+        vm.EndBatchOperation();
+
+        Assert.False(vm.IsBatchOperating);
+        Assert.Equal(string.Empty, vm.BatchProgressText);
+        Assert.Equal(0, vm.BatchProgressPercentage);
+        Assert.Equal(string.Empty, vm.BatchEstimatedTimeRemaining);
+    }
+
+    [Fact]
+    public void CancelBatchCommand_CancelsTheCancellationToken()
+    {
+        var vm = CreateViewModel();
+        var ct = vm.BeginBatchOperation();
+
+        Assert.False(ct.IsCancellationRequested);
+
+        vm.CancelBatchCommand.Execute(null);
+
+        Assert.True(ct.IsCancellationRequested);
+
+        vm.EndBatchOperation();
+    }
+
+    [Fact]
+    public void CancelBatchCommand_CannotExecuteWhenNotBatchOperating()
+    {
+        var vm = CreateViewModel();
+
+        Assert.False(vm.CancelBatchCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void CancelBatchCommand_CanExecuteWhenBatchOperating()
+    {
+        var vm = CreateViewModel();
+        vm.BeginBatchOperation();
+
+        Assert.True(vm.CancelBatchCommand.CanExecute(null));
+
+        vm.EndBatchOperation();
+    }
+
+    [Fact]
+    public void BeginBatchOperation_DisposesOldCancellationTokenSource()
+    {
+        var vm = CreateViewModel();
+
+        var ct1 = vm.BeginBatchOperation();
+        // Cancel the first token before beginning a new operation
+        vm.CancelBatchCommand.Execute(null);
+        Assert.True(ct1.IsCancellationRequested);
+
+        var ct2 = vm.BeginBatchOperation();
+
+        // The second token should be fresh and not cancelled
+        Assert.False(ct2.IsCancellationRequested);
+
+        vm.EndBatchOperation();
+    }
+
+    [Fact]
+    public void BatchProgressPercentage_DefaultIsZero()
+    {
+        var vm = CreateViewModel();
+
+        Assert.Equal(0, vm.BatchProgressPercentage);
+    }
+
+    [Fact]
+    public void BatchEstimatedTimeRemaining_DefaultIsEmpty()
+    {
+        var vm = CreateViewModel();
+
+        Assert.Equal(string.Empty, vm.BatchEstimatedTimeRemaining);
+    }
+
+    [Theory]
+    [InlineData(null, "")]
+    [InlineData(30, "预计剩余 30 秒")]
+    [InlineData(90, "预计剩余 1:30")]
+    [InlineData(3661, "预计剩余 1:01:01")]
+    public void FormatTimeRemaining_FormatsCorrectly(int? totalSeconds, string expected)
+    {
+        TimeSpan? ts = totalSeconds.HasValue ? TimeSpan.FromSeconds(totalSeconds.Value) : null;
+
+        var result = VideoListViewModel.FormatTimeRemaining(ts);
+
+        Assert.Equal(expected, result);
     }
 
     #endregion

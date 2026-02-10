@@ -47,7 +47,7 @@ public class ImportViewModelTests
         Assert.NotNull(vm.ScannedFiles);
         Assert.Empty(vm.ScannedFiles);
         Assert.Equal(string.Empty, vm.SelectedFolderPath);
-        Assert.Equal(string.Empty, vm.LibraryPath);
+        Assert.Equal("C:\\TestLibrary", vm.LibraryPath);
         Assert.False(vm.MoveFiles);
         Assert.Equal(0, vm.Progress);
         Assert.Equal(string.Empty, vm.StatusMessage);
@@ -717,6 +717,156 @@ public class ImportViewModelTests
         await vm.ImportCommand.ExecuteAsync(null);
 
         Assert.Equal(0, progressAtStart);
+    }
+
+    #endregion
+
+    #region EstimatedTimeRemaining Tests
+
+    [Fact]
+    public void EstimatedTimeRemaining_DefaultsToEmpty()
+    {
+        var vm = CreateViewModel();
+        Assert.Equal(string.Empty, vm.EstimatedTimeRemaining);
+    }
+
+    [Fact]
+    public async Task ImportAsync_ClearsEstimatedTimeRemaining_OnCompletion()
+    {
+        var files = CreateScanResult(2);
+        _importServiceMock
+            .Setup(s => s.ScanFolderAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(files);
+
+        _importServiceMock
+            .Setup(s => s.ImportVideosAsync(
+                It.IsAny<List<VideoFileInfo>>(),
+                It.IsAny<ImportMode>(),
+                It.IsAny<IProgress<ImportProgress>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ImportResult(2, 0, new List<ImportError>()));
+
+        var vm = CreateViewModel();
+        vm.SelectedFolderPath = "/test/folder";
+        vm.LibraryPath = "/library";
+        await vm.ScanFolderCommand.ExecuteAsync(null);
+
+        await vm.ImportCommand.ExecuteAsync(null);
+
+        Assert.Equal(string.Empty, vm.EstimatedTimeRemaining);
+    }
+
+    [Fact]
+    public async Task ImportAsync_ClearsEstimatedTimeRemaining_OnCancellation()
+    {
+        var files = CreateScanResult(1);
+        _importServiceMock
+            .Setup(s => s.ScanFolderAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(files);
+
+        var tcs = new TaskCompletionSource<ImportResult>();
+        _importServiceMock
+            .Setup(s => s.ImportVideosAsync(
+                It.IsAny<List<VideoFileInfo>>(),
+                It.IsAny<ImportMode>(),
+                It.IsAny<IProgress<ImportProgress>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns((List<VideoFileInfo> _, ImportMode _, IProgress<ImportProgress> _, CancellationToken ct) =>
+            {
+                ct.Register(() => tcs.TrySetCanceled(ct));
+                return tcs.Task;
+            });
+
+        var vm = CreateViewModel();
+        vm.SelectedFolderPath = "/test/folder";
+        vm.LibraryPath = "/library";
+        await vm.ScanFolderCommand.ExecuteAsync(null);
+
+        var importTask = vm.ImportCommand.ExecuteAsync(null);
+        vm.CancelCommand.Execute(null);
+        await importTask;
+
+        Assert.Equal(string.Empty, vm.EstimatedTimeRemaining);
+    }
+
+    [Fact]
+    public async Task ImportAsync_ClearsEstimatedTimeRemaining_OnException()
+    {
+        var files = CreateScanResult(1);
+        _importServiceMock
+            .Setup(s => s.ScanFolderAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(files);
+
+        _importServiceMock
+            .Setup(s => s.ImportVideosAsync(
+                It.IsAny<List<VideoFileInfo>>(),
+                It.IsAny<ImportMode>(),
+                It.IsAny<IProgress<ImportProgress>>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new IOException("Disk full"));
+
+        var vm = CreateViewModel();
+        vm.SelectedFolderPath = "/test/folder";
+        vm.LibraryPath = "/library";
+        await vm.ScanFolderCommand.ExecuteAsync(null);
+
+        await vm.ImportCommand.ExecuteAsync(null);
+
+        Assert.Equal(string.Empty, vm.EstimatedTimeRemaining);
+    }
+
+    [Fact]
+    public void EstimatedTimeRemaining_RaisesPropertyChanged()
+    {
+        var vm = CreateViewModel();
+        var raised = false;
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(vm.EstimatedTimeRemaining))
+                raised = true;
+        };
+
+        vm.EstimatedTimeRemaining = "预计剩余 30 秒";
+
+        Assert.True(raised);
+    }
+
+    #endregion
+
+    #region FormatTimeRemaining Tests
+
+    [Fact]
+    public void FormatTimeRemaining_Null_ReturnsEmpty()
+    {
+        Assert.Equal(string.Empty, ImportViewModel.FormatTimeRemaining(null));
+    }
+
+    [Fact]
+    public void FormatTimeRemaining_Seconds_FormatsCorrectly()
+    {
+        var result = ImportViewModel.FormatTimeRemaining(TimeSpan.FromSeconds(45));
+        Assert.Equal("预计剩余 45 秒", result);
+    }
+
+    [Fact]
+    public void FormatTimeRemaining_Minutes_FormatsCorrectly()
+    {
+        var result = ImportViewModel.FormatTimeRemaining(TimeSpan.FromMinutes(3) + TimeSpan.FromSeconds(15));
+        Assert.Equal("预计剩余 3:15", result);
+    }
+
+    [Fact]
+    public void FormatTimeRemaining_Hours_FormatsCorrectly()
+    {
+        var result = ImportViewModel.FormatTimeRemaining(TimeSpan.FromHours(1) + TimeSpan.FromMinutes(5) + TimeSpan.FromSeconds(30));
+        Assert.Equal("预计剩余 1:05:30", result);
+    }
+
+    [Fact]
+    public void FormatTimeRemaining_ZeroSeconds_FormatsCorrectly()
+    {
+        var result = ImportViewModel.FormatTimeRemaining(TimeSpan.Zero);
+        Assert.Equal("预计剩余 0 秒", result);
     }
 
     #endregion

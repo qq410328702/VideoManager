@@ -46,6 +46,7 @@ public class ImportService : IImportService
 
     private readonly IFFmpegService _ffmpegService;
     private readonly IVideoRepository _videoRepository;
+    private readonly IMetricsService _metricsService;
     private readonly ILogger<ImportService> _logger;
     private readonly string _videoLibraryPath;
     private readonly string _thumbnailDir;
@@ -56,11 +57,13 @@ public class ImportService : IImportService
     /// <param name="ffmpegService">FFmpeg service for metadata extraction and thumbnail generation.</param>
     /// <param name="videoRepository">Repository for persisting video entries.</param>
     /// <param name="options">Configuration options containing video library and thumbnail directory paths.</param>
+    /// <param name="metricsService">Metrics service for recording operation timing.</param>
     /// <param name="logger">Logger for structured logging.</param>
-    public ImportService(IFFmpegService ffmpegService, IVideoRepository videoRepository, IOptions<VideoManagerOptions> options, ILogger<ImportService> logger)
+    public ImportService(IFFmpegService ffmpegService, IVideoRepository videoRepository, IOptions<VideoManagerOptions> options, IMetricsService metricsService, ILogger<ImportService> logger)
     {
         _ffmpegService = ffmpegService ?? throw new ArgumentNullException(nameof(ffmpegService));
         _videoRepository = videoRepository ?? throw new ArgumentNullException(nameof(videoRepository));
+        _metricsService = metricsService ?? throw new ArgumentNullException(nameof(metricsService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         ArgumentNullException.ThrowIfNull(options);
         _videoLibraryPath = options.Value.VideoLibraryPath ?? throw new ArgumentException("VideoLibraryPath must be configured.", nameof(options));
@@ -83,6 +86,9 @@ public class ImportService : IImportService
     public async Task<ImportResult> ImportVideosAsync(List<VideoFileInfo> files, ImportMode mode, IProgress<ImportProgress> progress, CancellationToken ct)
     {
         if (files == null) throw new ArgumentNullException(nameof(files));
+
+        // Record total import operation timing
+        using var importTimer = _metricsService.StartTimer("import");
 
         Directory.CreateDirectory(_videoLibraryPath);
         Directory.CreateDirectory(_thumbnailDir);
@@ -205,6 +211,9 @@ public class ImportService : IImportService
         await semaphore.WaitAsync(ct);
         try
         {
+            // Record per-file processing timing
+            using var fileTimer = _metricsService.StartTimer("import_file");
+
             ct.ThrowIfCancellationRequested();
 
             // Extract metadata via FFmpeg with retry

@@ -31,7 +31,9 @@ public class LoggingIntegrationTests
         context.Database.EnsureCreated();
 
         var mockLogger = new Mock<ILogger<SearchService>>();
-        var service = new SearchService(context, mockLogger.Object);
+        var mockMetrics = new Mock<IMetricsService>();
+        mockMetrics.Setup(m => m.StartTimer(It.IsAny<string>())).Returns(new NoOpDisposable());
+        var service = new SearchService(context, mockMetrics.Object, mockLogger.Object);
         var criteria = new SearchCriteria(Keyword: "test", TagIds: null, DateFrom: null, DateTo: null,
             DurationMin: null, DurationMax: null);
 
@@ -186,7 +188,7 @@ public class LoggingIntegrationTests
     {
         // Arrange
         var mockLogger = new Mock<ILogger<ThumbnailCacheService>>();
-        var service = new ThumbnailCacheService(_ => true, mockLogger.Object);
+        var service = new ThumbnailCacheService(_ => true, Options.Create(new VideoManagerOptions()), mockLogger.Object);
 
         // Act — first call is a cache miss
         await service.LoadThumbnailAsync("/thumbnails/video1.jpg");
@@ -207,7 +209,7 @@ public class LoggingIntegrationTests
     {
         // Arrange
         var mockLogger = new Mock<ILogger<ThumbnailCacheService>>();
-        var service = new ThumbnailCacheService(_ => true, mockLogger.Object);
+        var service = new ThumbnailCacheService(_ => true, Options.Create(new VideoManagerOptions()), mockLogger.Object);
 
         // Act — first call populates cache, second call is a hit
         await service.LoadThumbnailAsync("/thumbnails/video1.jpg");
@@ -225,4 +227,9 @@ public class LoggingIntegrationTests
     }
 
     #endregion
+
+    private sealed class NoOpDisposable : IDisposable
+    {
+        public void Dispose() { }
+    }
 }

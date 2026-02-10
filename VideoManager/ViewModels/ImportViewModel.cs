@@ -15,6 +15,7 @@ public partial class ImportViewModel : ViewModelBase
 {
     private readonly IImportService _importService;
     private CancellationTokenSource? _cancellationTokenSource;
+    private ProgressEstimator? _progressEstimator;
 
     /// <summary>
     /// The collection of scanned video files available for import.
@@ -78,6 +79,13 @@ public partial class ImportViewModel : ViewModelBase
     private ImportResult? _importResult;
 
     /// <summary>
+    /// The estimated time remaining for the current import operation.
+    /// Null when no import is in progress or no estimate is available yet.
+    /// </summary>
+    [ObservableProperty]
+    private string _estimatedTimeRemaining = string.Empty;
+
+    /// <summary>
     /// Creates a new ImportViewModel.
     /// </summary>
     /// <param name="importService">The import service for scanning and importing videos.</param>
@@ -85,6 +93,22 @@ public partial class ImportViewModel : ViewModelBase
     {
         _importService = importService ?? throw new ArgumentNullException(nameof(importService));
         LibraryPath = options.Value.VideoLibraryPath;
+    }
+
+    /// <summary>
+    /// Formats a TimeSpan into a human-readable remaining time string.
+    /// </summary>
+    internal static string FormatTimeRemaining(TimeSpan? timeRemaining)
+    {
+        if (timeRemaining is null)
+            return string.Empty;
+
+        var ts = timeRemaining.Value;
+        if (ts.TotalHours >= 1)
+            return $"预计剩余 {(int)ts.TotalHours}:{ts.Minutes:D2}:{ts.Seconds:D2}";
+        if (ts.TotalMinutes >= 1)
+            return $"预计剩余 {(int)ts.TotalMinutes}:{ts.Seconds:D2}";
+        return $"预计剩余 {(int)ts.TotalSeconds} 秒";
     }
 
     /// <summary>
@@ -147,11 +171,16 @@ public partial class ImportViewModel : ViewModelBase
 
         IsImporting = true;
         Progress = 0;
+        EstimatedTimeRemaining = string.Empty;
         StatusMessage = "正在导入...";
         ImportResult = null;
 
         var mode = MoveFiles ? ImportMode.Move : ImportMode.Copy;
         var filesToImport = ScannedFiles.ToList();
+
+        // Initialize the progress estimator for this import batch
+        _progressEstimator = filesToImport.Count > 0 ? new ProgressEstimator(filesToImport.Count) : null;
+        var lastReportedCompleted = 0;
 
         var progressReporter = new Progress<ImportProgress>(p =>
         {
@@ -159,6 +188,20 @@ public partial class ImportViewModel : ViewModelBase
             {
                 Progress = (double)p.Completed / p.Total * 100;
             }
+
+            // Record completions in the estimator for each newly completed item
+            if (_progressEstimator is not null)
+            {
+                var newlyCompleted = p.Completed - lastReportedCompleted;
+                for (var i = 0; i < newlyCompleted; i++)
+                {
+                    _progressEstimator.RecordCompletion();
+                }
+                lastReportedCompleted = p.Completed;
+
+                EstimatedTimeRemaining = FormatTimeRemaining(_progressEstimator.EstimatedTimeRemaining);
+            }
+
             StatusMessage = $"正在导入 ({p.Completed}/{p.Total}): {p.CurrentFile}";
         });
 
@@ -168,6 +211,7 @@ public partial class ImportViewModel : ViewModelBase
 
             ImportResult = result;
             Progress = 100;
+            EstimatedTimeRemaining = string.Empty;
 
             if (result.FailCount > 0)
             {
@@ -186,14 +230,17 @@ public partial class ImportViewModel : ViewModelBase
         catch (OperationCanceledException)
         {
             StatusMessage = "导入已取消";
+            EstimatedTimeRemaining = string.Empty;
         }
         catch (Exception ex)
         {
             StatusMessage = $"导入失败: {ex.Message}";
+            EstimatedTimeRemaining = string.Empty;
         }
         finally
         {
             IsImporting = false;
+            _progressEstimator = null;
         }
     }
 

@@ -54,8 +54,12 @@ public class FileWatcherPropertyTests
             VideoLibraryPath = "/test/videos",
             ThumbnailDirectory = "/test/thumbnails"
         });
+        var navigationServiceMock = new Mock<INavigationService>();
+        var dialogServiceMock = new Mock<IDialogService>();
+        var serviceProviderMock = new Mock<IServiceProvider>();
 
-        var vm = new MainViewModel(videoListVm, searchVm, categoryVm, fileWatcherMock.Object, options);
+        var vm = new MainViewModel(videoListVm, searchVm, categoryVm, fileWatcherMock.Object, options,
+            navigationServiceMock.Object, dialogServiceMock.Object, serviceProviderMock.Object);
 
         // Pre-populate the Videos collection
         foreach (var video in videos)

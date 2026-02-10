@@ -140,7 +140,10 @@ public class ThumbnailPropertyTests : IDisposable
 
             // Use real SQLite In-Memory database
             using var context = CreateInMemoryContext();
-            var videoRepo = new VideoRepository(context);
+            var videoRepo = new VideoRepository(context, NullLogger<VideoRepository>.Instance);
+
+            var mockMetrics = new Mock<IMetricsService>();
+            mockMetrics.Setup(m => m.StartTimer(It.IsAny<string>())).Returns(new NoOpDisposable());
 
             var importService = new ImportService(
                 mockFfmpeg.Object,
@@ -150,6 +153,7 @@ public class ThumbnailPropertyTests : IDisposable
                     VideoLibraryPath = videoLibraryDir,
                     ThumbnailDirectory = thumbnailDir
                 }),
+                mockMetrics.Object,
                 NullLogger<ImportService>.Instance);
 
             // Execute import
@@ -188,5 +192,10 @@ public class ThumbnailPropertyTests : IDisposable
 
             return importSucceeded && entryExists && thumbnailPathSet && thumbnailFileExists;
         });
+    }
+
+    private sealed class NoOpDisposable : IDisposable
+    {
+        public void Dispose() { }
     }
 }

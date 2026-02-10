@@ -1,6 +1,7 @@
-ï»¿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using VideoManager.Data;
 using VideoManager.Models;
+using Microsoft.Extensions.Logging.Abstractions;
 using VideoManager.Repositories;
 
 namespace VideoManager.Tests.PropertyTests;
@@ -92,7 +93,7 @@ public class TagPropertyTests
     }
 
     /// <summary>
-    /// **Feature: video-manager, Property 7: Tag å…³è” round-trip**
+    /// **Feature: video-manager, Property 7: Tag ¹ØÁª round-trip**
     /// **Validates: Requirements 3.2, 3.3, 6.3**
     ///
     /// For any VideoEntry and Tag, adding the Tag to the VideoEntry and querying
@@ -106,7 +107,7 @@ public class TagPropertyTests
             FsCheck.Fluent.Prop.ForAll(NonEmptyTagNameArb(), tagName =>
             {
                 using var context = CreateInMemoryContext();
-                var videoRepo = new VideoRepository(context);
+                var videoRepo = new VideoRepository(context, NullLogger<VideoRepository>.Instance);
 
                 // Create a VideoEntry
                 var video = new VideoEntry
