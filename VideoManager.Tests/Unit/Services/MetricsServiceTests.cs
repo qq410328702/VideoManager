@@ -5,14 +5,15 @@ using VideoManager.Services;
 
 namespace VideoManager.Tests.Unit.Services;
 
-public class MetricsServiceTests : IDisposable
+public class MetricsServiceTests : IAsyncDisposable
 {
     private readonly ILogger<MetricsService> _nullLogger = NullLogger<MetricsService>.Instance;
     private MetricsService? _service;
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
-        _service?.Dispose();
+        if (_service is not null)
+            await _service.DisposeAsync();
     }
 
     #region Constructor and Initialization
@@ -335,6 +336,77 @@ public class MetricsServiceTests : IDisposable
 
         _service.Dispose();
         _service.Dispose(); // Should not throw
+    }
+
+    #endregion
+
+    #region DisposeAsync — Requirements 9.1, 9.4
+
+    [Fact]
+    public async Task DisposeAsync_DisposesTimerAndLogsMessage()
+    {
+        // Requirement 9.1: DisposeAsync should dispose the Timer
+        var mockLogger = new Mock<ILogger<MetricsService>>();
+        var service = new MetricsService(mockLogger.Object);
+
+        await service.DisposeAsync();
+
+        // Verify that the service logged the async dispose message
+        mockLogger.Verify(
+            x => x.Log(
+                LogLevel.Information,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("disposed asynchronously")),
+                It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_CalledMultipleTimes_DoesNotThrow()
+    {
+        // Requirement 9.1: subsequent calls should be safe (idempotent)
+        var service = new MetricsService(_nullLogger);
+
+        await service.DisposeAsync();
+        var ex = await Record.ExceptionAsync(async () => await service.DisposeAsync());
+
+        Assert.Null(ex);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_AfterDispose_DoesNotThrow()
+    {
+        // Requirement 9.4: both IDisposable and IAsyncDisposable coexist
+        var service = new MetricsService(_nullLogger);
+
+        service.Dispose();
+        var ex = await Record.ExceptionAsync(async () => await service.DisposeAsync());
+
+        Assert.Null(ex);
+    }
+
+    [Fact]
+    public async Task Dispose_AfterDisposeAsync_DoesNotThrow()
+    {
+        // Requirement 9.4: both IDisposable and IAsyncDisposable coexist
+        var service = new MetricsService(_nullLogger);
+
+        await service.DisposeAsync();
+        var ex = Record.Exception(() => service.Dispose());
+
+        Assert.Null(ex);
+    }
+
+    [Fact]
+    public async Task DisposeAsync_ServiceImplementsIAsyncDisposable()
+    {
+        // Requirement 9.1: MetricsService SHALL implement IAsyncDisposable
+        var service = new MetricsService(_nullLogger);
+
+        Assert.IsAssignableFrom<IAsyncDisposable>(service);
+
+        await service.DisposeAsync();
     }
 
     #endregion

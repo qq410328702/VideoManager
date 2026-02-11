@@ -1,4 +1,4 @@
-﻿using System.IO;
+﻿﻿using System.IO;
 using System.Windows;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,42 +32,13 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
-        // Global exception handlers to catch unhandled crashes
-        DispatcherUnhandledException += (s, args) =>
-        {
-            MessageBox.Show(
-                $"未处理的 UI 异常:\n\n{args.Exception}",
-                "应用错误",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
-            args.Handled = true;
-        };
-
-        AppDomain.CurrentDomain.UnhandledException += (s, args) =>
-        {
-            if (args.ExceptionObject is Exception ex)
-            {
-                MessageBox.Show(
-                    $"未处理的异常:\n\n{ex}",
-                    "致命错误",
-                    MessageBoxButton.OK,
-                    MessageBoxImage.Error);
-            }
-        };
-
-        TaskScheduler.UnobservedTaskException += (s, args) =>
-        {
-            MessageBox.Show(
-                $"未观察的任务异常:\n\n{args.Exception}",
-                "任务错误",
-                MessageBoxButton.OK,
-                MessageBoxImage.Error);
-            args.SetObserved();
-        };
-
         var services = new ServiceCollection();
         ConfigureServices(services);
         ServiceProvider = services.BuildServiceProvider();
+
+        // Initialize GlobalExceptionHandler after DI container is built
+        var globalExceptionHandler = ServiceProvider.GetRequiredService<GlobalExceptionHandler>();
+        globalExceptionHandler.Register(this);
 
         // Ensure database is created and up-to-date
         using (var scope = ServiceProvider.CreateScope())
@@ -256,14 +227,39 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Disposes the periodic backup timer when the application exits.
+    /// Disposes the periodic backup timer and async-disposable services when the application exits.
     /// </summary>
     protected override void OnExit(ExitEventArgs e)
     {
         _periodicBackupTimer?.Dispose();
         _periodicBackupTimer = null;
+
+        // Explicitly call DisposeAsync on all IAsyncDisposable services.
+        // OnExit is synchronous, so we use GetAwaiter().GetResult().
+        try
+        {
+            var fileWatcher = ServiceProvider.GetService<IFileWatcherService>() as IAsyncDisposable;
+            fileWatcher?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+        catch { /* best-effort disposal */ }
+
+        try
+        {
+            var metrics = ServiceProvider.GetService<IMetricsService>() as IAsyncDisposable;
+            metrics?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+        catch { /* best-effort disposal */ }
+
+        try
+        {
+            var thumbnailLoader = ServiceProvider.GetService<IThumbnailPriorityLoader>();
+            thumbnailLoader?.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
+        catch { /* best-effort disposal */ }
+
         base.OnExit(e);
     }
+
 
     /// <summary>
     /// Configures all services, repositories, ViewModels, and the DbContext
@@ -300,8 +296,12 @@ public partial class App : Application
         services.AddScoped<ICategoryRepository, CategoryRepository>();
 
         // --- Services (Singleton) ---
-        services.AddSingleton<IFFmpegService>(sp =>
+        services.AddSingleton<FFmpegService>(sp =>
             new FFmpegService(sp.GetRequiredService<IMetricsService>()));
+        services.AddSingleton<IFFmpegService>(sp =>
+            new ResilientFFmpegService(
+                sp.GetRequiredService<FFmpegService>(),
+                sp.GetRequiredService<ILogger<ResilientFFmpegService>>()));
 
         // Configure VideoManagerOptions with library/thumbnail paths
         var videoLibraryPath = Path.Combine(appDir, "VideoLibrary");
@@ -327,6 +327,7 @@ public partial class App : Application
         services.AddScoped<IDeleteService, DeleteService>();
         services.AddSingleton<IWindowSettingsService, WindowSettingsService>();
         services.AddSingleton<IThumbnailCacheService, ThumbnailCacheService>();
+        services.AddSingleton<IThumbnailPriorityLoader, ThumbnailPriorityLoader>();
         services.AddSingleton<IFileWatcherService, FileWatcherService>();
 
         // --- MetricsService (Singleton) ---
@@ -347,12 +348,15 @@ public partial class App : Application
         services.AddSingleton<INavigationService, NavigationService>();
         services.AddSingleton<IDialogService, DialogService>();
 
+        // --- GlobalExceptionHandler (Singleton) ---
+        services.AddSingleton<GlobalExceptionHandler>();
+
         // --- ViewModels (Transient – new instance per request) ---
         services.AddTransient<VideoListViewModel>(sp =>
         {
             var videoRepository = sp.GetRequiredService<IVideoRepository>();
-            var thumbnailCacheService = sp.GetRequiredService<IThumbnailCacheService>();
-            return new VideoListViewModel(videoRepository, thumbnailCacheService.LoadThumbnailAsync);
+            var thumbnailPriorityLoader = sp.GetRequiredService<IThumbnailPriorityLoader>();
+            return new VideoListViewModel(videoRepository, thumbnailPriorityLoader);
         });
         services.AddTransient<ImportViewModel>();
         services.AddTransient<SearchViewModel>();
@@ -360,10 +364,16 @@ public partial class App : Application
         services.AddTransient<EditViewModel>();
         services.AddTransient<VideoPlayerViewModel>();
         services.AddTransient<DiagnosticsViewModel>();
+        services.AddTransient<PaginationViewModel>();
+        services.AddTransient<SortViewModel>();
+        services.AddTransient<BatchOperationViewModel>();
         services.AddTransient<MainViewModel>(sp => new MainViewModel(
             sp.GetRequiredService<VideoListViewModel>(),
             sp.GetRequiredService<SearchViewModel>(),
             sp.GetRequiredService<CategoryViewModel>(),
+            sp.GetRequiredService<PaginationViewModel>(),
+            sp.GetRequiredService<SortViewModel>(),
+            sp.GetRequiredService<BatchOperationViewModel>(),
             sp.GetRequiredService<IFileWatcherService>(),
             sp.GetRequiredService<IOptions<VideoManagerOptions>>(),
             sp.GetRequiredService<INavigationService>(),

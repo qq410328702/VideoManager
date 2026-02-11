@@ -1,3 +1,4 @@
+using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.Options;
 using Moq;
 using VideoManager.Models;
@@ -7,7 +8,8 @@ using VideoManager.ViewModels;
 
 namespace VideoManager.Tests.Unit.ViewModels;
 
-public class MainViewModelTests
+[Collection("Messenger")]
+public class MainViewModelTests : IDisposable
 {
     private readonly Mock<IVideoRepository> _videoRepoMock;
     private readonly Mock<ISearchService> _searchServiceMock;
@@ -34,6 +36,14 @@ public class MainViewModelTests
             VideoLibraryPath = "/test/videos",
             ThumbnailDirectory = "/test/thumbnails"
         });
+
+        // Reset messenger between tests
+        WeakReferenceMessenger.Default.Reset();
+    }
+
+    public void Dispose()
+    {
+        WeakReferenceMessenger.Default.Reset();
     }
 
     private MainViewModel CreateViewModel()
@@ -41,7 +51,11 @@ public class MainViewModelTests
         var videoListVm = new VideoListViewModel(_videoRepoMock.Object);
         var searchVm = new SearchViewModel(_searchServiceMock.Object);
         var categoryVm = new CategoryViewModel(_categoryRepoMock.Object, _tagRepoMock.Object);
-        return new MainViewModel(videoListVm, searchVm, categoryVm, _fileWatcherMock.Object, _options,
+        var paginationVm = new PaginationViewModel(videoListVm);
+        var sortVm = new SortViewModel();
+        var batchOperationVm = new BatchOperationViewModel(videoListVm, categoryVm, _dialogServiceMock.Object, _serviceProviderMock.Object);
+        return new MainViewModel(videoListVm, searchVm, categoryVm, paginationVm, sortVm, batchOperationVm,
+            _fileWatcherMock.Object, _options,
             _navigationServiceMock.Object, _dialogServiceMock.Object, _serviceProviderMock.Object);
     }
 
@@ -85,8 +99,13 @@ public class MainViewModelTests
     {
         var searchVm = new SearchViewModel(_searchServiceMock.Object);
         var categoryVm = new CategoryViewModel(_categoryRepoMock.Object, _tagRepoMock.Object);
+        var videoListVm = new VideoListViewModel(_videoRepoMock.Object);
+        var paginationVm = new PaginationViewModel(videoListVm);
+        var sortVm = new SortViewModel();
+        var batchOperationVm = new BatchOperationViewModel(videoListVm, categoryVm, _dialogServiceMock.Object, _serviceProviderMock.Object);
 
-        Assert.Throws<ArgumentNullException>(() => new MainViewModel(null!, searchVm, categoryVm, _fileWatcherMock.Object, _options,
+        Assert.Throws<ArgumentNullException>(() => new MainViewModel(null!, searchVm, categoryVm, paginationVm, sortVm, batchOperationVm,
+            _fileWatcherMock.Object, _options,
             _navigationServiceMock.Object, _dialogServiceMock.Object, _serviceProviderMock.Object));
     }
 
@@ -95,8 +114,12 @@ public class MainViewModelTests
     {
         var videoListVm = new VideoListViewModel(_videoRepoMock.Object);
         var categoryVm = new CategoryViewModel(_categoryRepoMock.Object, _tagRepoMock.Object);
+        var paginationVm = new PaginationViewModel(videoListVm);
+        var sortVm = new SortViewModel();
+        var batchOperationVm = new BatchOperationViewModel(videoListVm, categoryVm, _dialogServiceMock.Object, _serviceProviderMock.Object);
 
-        Assert.Throws<ArgumentNullException>(() => new MainViewModel(videoListVm, null!, categoryVm, _fileWatcherMock.Object, _options,
+        Assert.Throws<ArgumentNullException>(() => new MainViewModel(videoListVm, null!, categoryVm, paginationVm, sortVm, batchOperationVm,
+            _fileWatcherMock.Object, _options,
             _navigationServiceMock.Object, _dialogServiceMock.Object, _serviceProviderMock.Object));
     }
 
@@ -105,8 +128,12 @@ public class MainViewModelTests
     {
         var videoListVm = new VideoListViewModel(_videoRepoMock.Object);
         var searchVm = new SearchViewModel(_searchServiceMock.Object);
+        var paginationVm = new PaginationViewModel(videoListVm);
+        var sortVm = new SortViewModel();
+        var batchOperationVm = new BatchOperationViewModel(videoListVm, new CategoryViewModel(_categoryRepoMock.Object, _tagRepoMock.Object), _dialogServiceMock.Object, _serviceProviderMock.Object);
 
-        Assert.Throws<ArgumentNullException>(() => new MainViewModel(videoListVm, searchVm, null!, _fileWatcherMock.Object, _options,
+        Assert.Throws<ArgumentNullException>(() => new MainViewModel(videoListVm, searchVm, null!, paginationVm, sortVm, batchOperationVm,
+            _fileWatcherMock.Object, _options,
             _navigationServiceMock.Object, _dialogServiceMock.Object, _serviceProviderMock.Object));
     }
 
@@ -117,10 +144,12 @@ public class MainViewModelTests
 
         Assert.Equal("就绪", vm.StatusText);
         Assert.Equal(string.Empty, vm.SearchKeyword);
-        Assert.Equal("第 1 页", vm.PageInfoText);
         Assert.NotNull(vm.VideoListVm);
         Assert.NotNull(vm.SearchVm);
         Assert.NotNull(vm.CategoryVm);
+        Assert.NotNull(vm.PaginationVm);
+        Assert.NotNull(vm.SortVm);
+        Assert.NotNull(vm.BatchOperationVm);
     }
 
     #endregion
@@ -172,7 +201,7 @@ public class MainViewModelTests
     }
 
     [Fact]
-    public async Task InitializeAsync_UpdatesPageInfoAfterLoading()
+    public async Task InitializeAsync_SyncsPaginationAfterLoading()
     {
         SetupDefaultVideoRepo(count: 5, totalCount: 5);
         SetupDefaultCategoryAndTags();
@@ -180,7 +209,7 @@ public class MainViewModelTests
         var vm = CreateViewModel();
         await vm.InitializeCommand.ExecuteAsync(null);
 
-        Assert.Contains("5", vm.PageInfoText);
+        Assert.Contains("5", vm.PaginationVm.PageInfoText);
     }
 
     [Fact]
@@ -290,8 +319,12 @@ public class MainViewModelTests
         var vm = CreateViewModel();
         vm.SearchKeyword = "hello";
 
-        // Wait for debounce (300ms) + generous buffer for CI/busy systems
-        await Task.Delay(800);
+        // Poll for debounce completion (300ms debounce + execution time)
+        for (int i = 0; i < 30; i++)
+        {
+            await Task.Delay(100);
+            if (_searchServiceMock.Invocations.Count > 0) break;
+        }
 
         _searchServiceMock.Verify(
             s => s.SearchAsync(It.Is<SearchCriteria>(c => c.Keyword == "hello"), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()),
@@ -397,78 +430,100 @@ public class MainViewModelTests
     }
 
     [Fact]
-    public async Task RefreshAsync_UpdatesPageInfo()
+    public async Task RefreshAsync_SyncsPaginationInfo()
     {
         SetupDefaultVideoRepo(count: 50, totalCount: 100);
 
         var vm = CreateViewModel();
         await vm.RefreshCommand.ExecuteAsync(null);
 
-        Assert.Contains("100", vm.PageInfoText);
+        Assert.Contains("100", vm.PaginationVm.PageInfoText);
     }
 
     #endregion
 
-    #region Pagination Tests
+    #region Messenger Integration Tests
 
     [Fact]
-    public async Task PreviousPageAsync_DelegatesAndUpdatesPageInfo()
+    public async Task Receive_SortChangedMessage_SyncsToVideoListVmAndReloads()
     {
-        // Setup multi-page data
-        _videoRepoMock
-            .Setup(r => r.GetPagedAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>(), It.IsAny<SortField>(), It.IsAny<SortDirection>()))
-            .ReturnsAsync((int page, int size, CancellationToken _, SortField __, SortDirection ___) =>
-                CreatePagedResult(50, 100, page, size));
+        SetupDefaultVideoRepo();
 
         var vm = CreateViewModel();
 
-        // Load initial data to set up pagination state
-        await vm.VideoListVm.LoadVideosCommand.ExecuteAsync(null);
-        Assert.Equal(1, vm.VideoListVm.CurrentPage);
-        Assert.Equal(2, vm.VideoListVm.TotalPages);
+        // Send a sort changed message
+        WeakReferenceMessenger.Default.Send(new SortChangedMessage(SortField.Duration, SortDirection.Ascending));
 
-        // Go to page 2 first
-        await vm.NextPageCommand.ExecuteAsync(null);
-        Assert.Equal(2, vm.VideoListVm.CurrentPage);
+        // Allow async reload to complete
+        await Task.Delay(200);
 
-        // Now go back to page 1
-        await vm.PreviousPageCommand.ExecuteAsync(null);
-        Assert.Equal(1, vm.VideoListVm.CurrentPage);
-        Assert.Contains("1", vm.PageInfoText);
+        Assert.Equal(SortField.Duration, vm.VideoListVm.SortField);
+        Assert.Equal(SortDirection.Ascending, vm.VideoListVm.SortDirection);
     }
 
     [Fact]
-    public async Task NextPageAsync_DelegatesAndUpdatesPageInfo()
+    public async Task Receive_RefreshRequestedMessage_RefreshesVideoList()
     {
-        _videoRepoMock
-            .Setup(r => r.GetPagedAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>(), It.IsAny<SortField>(), It.IsAny<SortDirection>()))
-            .ReturnsAsync((int page, int size, CancellationToken _, SortField __, SortDirection ___) =>
-                CreatePagedResult(50, 100, page, size));
+        SetupDefaultVideoRepo();
 
         var vm = CreateViewModel();
 
-        // Load initial data
-        await vm.VideoListVm.LoadVideosCommand.ExecuteAsync(null);
-        Assert.Equal(1, vm.VideoListVm.CurrentPage);
+        WeakReferenceMessenger.Default.Send(new RefreshRequestedMessage());
 
-        await vm.NextPageCommand.ExecuteAsync(null);
+        // Allow async refresh to complete
+        await Task.Delay(200);
 
-        Assert.Equal(2, vm.VideoListVm.CurrentPage);
-        Assert.Contains("2", vm.PageInfoText);
+        _videoRepoMock.Verify(r => r.GetPagedAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>(), It.IsAny<SortField>(), It.IsAny<SortDirection>()), Times.AtLeastOnce);
     }
 
     [Fact]
-    public async Task PageInfoText_UpdatesWhenVideoListPaginationChanges()
+    public void Receive_BatchOperationCompletedMessage_UpdatesStatusText()
     {
-        SetupDefaultVideoRepo(count: 50, totalCount: 150);
-
         var vm = CreateViewModel();
-        await vm.VideoListVm.LoadVideosCommand.ExecuteAsync(null);
 
-        // PageInfoText should reflect the current state
-        Assert.Contains("1", vm.PageInfoText);
-        Assert.Contains("3", vm.PageInfoText);
-        Assert.Contains("150", vm.PageInfoText);
+        WeakReferenceMessenger.Default.Send(new BatchOperationCompletedMessage("BatchDelete", 10, 2));
+
+        Assert.Contains("BatchDelete", vm.StatusText);
+        Assert.Contains("10", vm.StatusText);
+        Assert.Contains("2", vm.StatusText);
+    }
+
+    [Fact]
+    public void Receive_PageChangedMessage_UpdatesStatusText()
+    {
+        var vm = CreateViewModel();
+
+        WeakReferenceMessenger.Default.Send(new PageChangedMessage(3));
+
+        Assert.Contains("3", vm.StatusText);
+    }
+
+    #endregion
+
+    #region Sub-ViewModel Exposure Tests
+
+    [Fact]
+    public void PaginationVm_IsExposedAsPublicProperty()
+    {
+        var vm = CreateViewModel();
+        Assert.NotNull(vm.PaginationVm);
+        Assert.IsType<PaginationViewModel>(vm.PaginationVm);
+    }
+
+    [Fact]
+    public void SortVm_IsExposedAsPublicProperty()
+    {
+        var vm = CreateViewModel();
+        Assert.NotNull(vm.SortVm);
+        Assert.IsType<SortViewModel>(vm.SortVm);
+    }
+
+    [Fact]
+    public void BatchOperationVm_IsExposedAsPublicProperty()
+    {
+        var vm = CreateViewModel();
+        Assert.NotNull(vm.BatchOperationVm);
+        Assert.IsType<BatchOperationViewModel>(vm.BatchOperationVm);
     }
 
     #endregion
@@ -520,39 +575,6 @@ public class MainViewModelTests
 
     #endregion
 
-    #region PageInfoText Format Tests
-
-    [Fact]
-    public async Task PageInfoText_FormatsCorrectly()
-    {
-        _videoRepoMock
-            .Setup(r => r.GetPagedAsync(It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>(), It.IsAny<SortField>(), It.IsAny<SortDirection>()))
-            .ReturnsAsync((int page, int size, CancellationToken _, SortField __, SortDirection ___) =>
-                CreatePagedResult(50, 200, page, size));
-
-        var vm = CreateViewModel();
-        await vm.VideoListVm.LoadVideosCommand.ExecuteAsync(null);
-
-        // Format: "第 {CurrentPage}/{TotalPages} 页 (共 {TotalCount} 个)"
-        Assert.Equal("第 1/4 页 (共 200 个)", vm.PageInfoText);
-    }
-
-    [Fact]
-    public async Task PageInfoText_UpdatesAfterSearch()
-    {
-        _searchServiceMock
-            .Setup(s => s.SearchAsync(It.IsAny<SearchCriteria>(), It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(CreatePagedResult(3, 3, 1, 20));
-
-        var vm = CreateViewModel();
-        vm.SearchKeyword = "test";
-        await vm.SearchCommand.ExecuteAsync(null);
-
-        Assert.Contains("3", vm.PageInfoText);
-    }
-
-    #endregion
-
     #region PropertyChanged Tests
 
     [Fact]
@@ -567,22 +589,6 @@ public class MainViewModelTests
         };
 
         vm.SearchKeyword = "new keyword";
-
-        Assert.True(raised);
-    }
-
-    [Fact]
-    public void PageInfoText_RaisesPropertyChanged()
-    {
-        var vm = CreateViewModel();
-        var raised = false;
-        vm.PropertyChanged += (_, e) =>
-        {
-            if (e.PropertyName == nameof(MainViewModel.PageInfoText))
-                raised = true;
-        };
-
-        vm.PageInfoText = "第 2/5 页 (共 250 个)";
 
         Assert.True(raised);
     }

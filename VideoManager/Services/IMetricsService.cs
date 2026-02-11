@@ -4,7 +4,7 @@ namespace VideoManager.Services;
 /// Service for collecting and reporting application performance metrics.
 /// Provides memory monitoring, operation timing, and cache statistics.
 /// </summary>
-public interface IMetricsService : IDisposable
+public interface IMetricsService : IDisposable, IAsyncDisposable
 {
     /// <summary>
     /// Gets the current managed heap memory usage in bytes.

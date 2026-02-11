@@ -26,7 +26,7 @@ public class SearchService : ISearchService
         if (pageSize < 1) throw new ArgumentOutOfRangeException(nameof(pageSize), "PageSize must be >= 1.");
 
         // Record search operation timing
-        using var timer = _metricsService.StartTimer("search");
+        using var timer = _metricsService.StartTimer(MetricsOperationNames.Search);
 
         var hasKeyword = !string.IsNullOrWhiteSpace(criteria.Keyword);
         var hasTags = criteria.TagIds is { Count: > 0 };

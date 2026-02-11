@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Polly;
 using VideoManager.Data;
 using VideoManager.Models;
+using VideoManager.Services;
 
 namespace VideoManager.Repositories;
 
@@ -9,24 +11,28 @@ public class VideoRepository : IVideoRepository
 {
     private readonly VideoManagerDbContext _context;
     private readonly ILogger<VideoRepository> _logger;
+    private readonly ResiliencePipeline _retryPipeline;
 
     public VideoRepository(VideoManagerDbContext context, ILogger<VideoRepository> logger)
     {
         _context = context;
         _logger = logger;
+        _retryPipeline = DatabaseRetryPolicy.CreateRetryPipeline(logger);
     }
 
     public async Task<VideoEntry> AddAsync(VideoEntry entry, CancellationToken ct)
     {
         _context.VideoEntries.Add(entry);
-        await _context.SaveChangesAsync(ct);
+        await _retryPipeline.ExecuteAsync(
+            async token => await _context.SaveChangesAsync(token), ct);
         return entry;
     }
 
     public async Task AddRangeAsync(IEnumerable<VideoEntry> entries, CancellationToken ct)
     {
         _context.VideoEntries.AddRange(entries);
-        await _context.SaveChangesAsync(ct);
+        await _retryPipeline.ExecuteAsync(
+            async token => await _context.SaveChangesAsync(token), ct);
     }
 
     public async Task<VideoEntry?> GetByIdAsync(int id, CancellationToken ct)
@@ -40,7 +46,8 @@ public class VideoRepository : IVideoRepository
     public async Task UpdateAsync(VideoEntry entry, CancellationToken ct)
     {
         _context.VideoEntries.Update(entry);
-        await _context.SaveChangesAsync(ct);
+        await _retryPipeline.ExecuteAsync(
+            async token => await _context.SaveChangesAsync(token), ct);
     }
 
     public async Task DeleteAsync(int id, CancellationToken ct)
@@ -49,7 +56,8 @@ public class VideoRepository : IVideoRepository
         if (entry is not null)
         {
             _context.VideoEntries.Remove(entry);
-            await _context.SaveChangesAsync(ct);
+            await _retryPipeline.ExecuteAsync(
+                async token => await _context.SaveChangesAsync(token), ct);
         }
     }
 

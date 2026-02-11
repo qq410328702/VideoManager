@@ -48,7 +48,11 @@ public class NavigationDialogServiceTests
         var videoListVm = new VideoListViewModel(_videoRepoMock.Object);
         var searchVm = new SearchViewModel(_searchServiceMock.Object);
         var categoryVm = new CategoryViewModel(_categoryRepoMock.Object, _tagRepoMock.Object);
-        return new MainViewModel(videoListVm, searchVm, categoryVm, _fileWatcherMock.Object, _options,
+        var paginationVm = new PaginationViewModel(videoListVm);
+        var sortVm = new SortViewModel();
+        var batchOperationVm = new BatchOperationViewModel(videoListVm, categoryVm, _dialogServiceMock.Object, _serviceProviderMock.Object);
+        return new MainViewModel(videoListVm, searchVm, categoryVm, paginationVm, sortVm, batchOperationVm,
+            _fileWatcherMock.Object, _options,
             _navigationServiceMock.Object, _dialogServiceMock.Object, _serviceProviderMock.Object);
     }
 
@@ -337,7 +341,7 @@ public class NavigationDialogServiceTests
         vm.VideoListVm.SelectedVideos.Add(video2);
 
         // Act
-        await vm.BatchDeleteCommand.ExecuteAsync(null);
+        await vm.BatchOperationVm.BatchDeleteCommand.ExecuteAsync(null);
 
         // Assert - Validates Req 12.2: DialogService provides batch delete confirmation
         _dialogServiceMock.Verify(
@@ -401,7 +405,7 @@ public class NavigationDialogServiceTests
         vm.VideoListVm.SelectedVideos.Add(video2);
 
         // Act
-        await vm.BatchTagCommand.ExecuteAsync(null);
+        await vm.BatchOperationVm.BatchTagCommand.ExecuteAsync(null);
 
         // Assert - Validates Req 12.3: DialogService provides batch tag dialog
         _dialogServiceMock.Verify(
@@ -465,7 +469,7 @@ public class NavigationDialogServiceTests
         vm.VideoListVm.SelectedVideos.Add(video2);
 
         // Act
-        await vm.BatchCategoryCommand.ExecuteAsync(null);
+        await vm.BatchOperationVm.BatchCategoryCommand.ExecuteAsync(null);
 
         // Assert - Validates Req 12.4: DialogService provides batch category dialog
         _dialogServiceMock.Verify(
@@ -485,7 +489,7 @@ public class NavigationDialogServiceTests
         // No videos selected
 
         // Act
-        await vm.BatchDeleteCommand.ExecuteAsync(null);
+        await vm.BatchOperationVm.BatchDeleteCommand.ExecuteAsync(null);
 
         // Assert
         _dialogServiceMock.Verify(
@@ -501,7 +505,7 @@ public class NavigationDialogServiceTests
         // No videos selected
 
         // Act
-        await vm.BatchTagCommand.ExecuteAsync(null);
+        await vm.BatchOperationVm.BatchTagCommand.ExecuteAsync(null);
 
         // Assert
         _dialogServiceMock.Verify(
@@ -517,7 +521,7 @@ public class NavigationDialogServiceTests
         // No videos selected
 
         // Act
-        await vm.BatchCategoryCommand.ExecuteAsync(null);
+        await vm.BatchOperationVm.BatchCategoryCommand.ExecuteAsync(null);
 
         // Assert
         _dialogServiceMock.Verify(

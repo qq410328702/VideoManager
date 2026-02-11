@@ -48,5 +48,10 @@ public class VideoManagerOptions
     /// Interval in hours between automatic periodic backups. Default is 24 hours.
     /// </summary>
     public int BackupIntervalHours { get; set; } = 24;
+
+    /// <summary>
+    /// Compensation scan interval in hours. Default is 1 hour.
+    /// </summary>
+    public double CompensationScanIntervalHours { get; set; } = 1.0;
 }
 

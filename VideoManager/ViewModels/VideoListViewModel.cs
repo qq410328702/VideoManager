@@ -14,7 +14,7 @@ namespace VideoManager.ViewModels;
 public partial class VideoListViewModel : ViewModelBase
 {
     private readonly IVideoRepository _videoRepository;
-    private readonly Func<string, Task<string?>>? _thumbnailLoader;
+    private readonly IThumbnailPriorityLoader? _thumbnailPriorityLoader;
 
     /// <summary>
     /// The collection of videos currently displayed.
@@ -164,16 +164,35 @@ public partial class VideoListViewModel : ViewModelBase
     /// Creates a new VideoListViewModel.
     /// </summary>
     /// <param name="videoRepository">The video repository for data access.</param>
-    /// <param name="thumbnailLoader">
-    /// Optional async function that loads a thumbnail given a thumbnail path.
-    /// Returns the resolved path (or null on failure). Used for lazy thumbnail loading.
+    /// <param name="thumbnailPriorityLoader">
+    /// Optional priority loader that schedules thumbnail loading with visible-item priority.
     /// </param>
-    public VideoListViewModel(IVideoRepository videoRepository, Func<string, Task<string?>>? thumbnailLoader = null)
+    public VideoListViewModel(IVideoRepository videoRepository, IThumbnailPriorityLoader? thumbnailPriorityLoader = null)
     {
         _videoRepository = videoRepository ?? throw new ArgumentNullException(nameof(videoRepository));
-        _thumbnailLoader = thumbnailLoader;
+        _thumbnailPriorityLoader = thumbnailPriorityLoader;
+
+        if (_thumbnailPriorityLoader != null)
+        {
+            _thumbnailPriorityLoader.ThumbnailLoaded += OnThumbnailLoaded;
+        }
 
         SelectedVideos.CollectionChanged += (_, _) => UpdateSelectionState();
+    }
+
+    /// <summary>
+    /// Handles the ThumbnailLoaded event from the priority loader.
+    /// Updates the corresponding video's ThumbnailPath when a thumbnail is loaded.
+    /// </summary>
+    private void OnThumbnailLoaded(int videoId, string? resolvedPath)
+    {
+        if (resolvedPath == null) return;
+
+        var video = Videos.FirstOrDefault(v => v.Id == videoId);
+        if (video != null)
+        {
+            video.ThumbnailPath = resolvedPath;
+        }
     }
 
     /// <summary>
@@ -231,12 +250,16 @@ public partial class VideoListViewModel : ViewModelBase
                 CurrentPage = TotalPages;
             }
 
-            // Fire async thumbnail loading (fire-and-forget, non-blocking)
-            // Use CancellationToken.None since thumbnail loading should continue
-            // even after the main load command completes.
-            if (_thumbnailLoader != null)
+            // Schedule thumbnail loading via priority loader (non-blocking)
+            if (_thumbnailPriorityLoader != null)
             {
-                _ = LoadThumbnailsAsync(result.Items, CancellationToken.None);
+                foreach (var video in result.Items)
+                {
+                    if (!string.IsNullOrEmpty(video.ThumbnailPath))
+                    {
+                        _thumbnailPriorityLoader.Enqueue(video.Id, video.ThumbnailPath, isVisible: true);
+                    }
+                }
             }
         }
         finally
@@ -281,34 +304,6 @@ public partial class VideoListViewModel : ViewModelBase
 
         CurrentPage = page;
         await LoadVideosAsync(ct);
-    }
-
-    /// <summary>
-    /// Asynchronously loads thumbnails for the given video entries.
-    /// This runs in the background and updates ThumbnailPath as thumbnails are resolved.
-    /// </summary>
-    private async Task LoadThumbnailsAsync(IEnumerable<VideoEntry> videos, CancellationToken ct)
-    {
-        if (_thumbnailLoader == null) return;
-
-        foreach (var video in videos)
-        {
-            if (ct.IsCancellationRequested) break;
-            if (string.IsNullOrEmpty(video.ThumbnailPath)) continue;
-
-            try
-            {
-                var resolvedPath = await _thumbnailLoader(video.ThumbnailPath);
-                if (resolvedPath != null)
-                {
-                    video.ThumbnailPath = resolvedPath;
-                }
-            }
-            catch
-            {
-                // Thumbnail loading failure is non-critical; skip silently
-            }
-        }
     }
 
     /// <summary>

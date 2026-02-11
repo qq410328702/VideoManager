@@ -10,8 +10,7 @@ namespace VideoManager.Services;
 /// Uses a <see cref="System.Threading.Timer"/> to periodically sample memory and cache metrics
 /// every 5 seconds, and logs warnings when memory exceeds the configured threshold.
 /// </summary>
-public class MetricsService : IMetricsService
-{
+public class MetricsService : IMetricsService{
     /// <summary>
     /// Maximum number of timing entries to retain per operation.
     /// Older entries are removed when this limit is reached.
@@ -193,6 +192,19 @@ public class MetricsService : IMetricsService
     }
 
     /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed)
+            return;
+
+        _disposed = true;
+        await _collectionTimer.DisposeAsync().ConfigureAwait(false);
+        _logger.LogInformation("MetricsService disposed asynchronously");
+
+        GC.SuppressFinalize(this);
+    }
+
+    /// <inheritdoc />
     public void Dispose()
     {
         if (_disposed)
@@ -201,6 +213,8 @@ public class MetricsService : IMetricsService
         _disposed = true;
         _collectionTimer.Dispose();
         _logger.LogInformation("MetricsService disposed");
+
+        GC.SuppressFinalize(this);
     }
 
     /// <summary>

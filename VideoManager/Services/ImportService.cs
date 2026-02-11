@@ -88,7 +88,7 @@ public class ImportService : IImportService
         if (files == null) throw new ArgumentNullException(nameof(files));
 
         // Record total import operation timing
-        using var importTimer = _metricsService.StartTimer("import");
+        using var importTimer = _metricsService.StartTimer(MetricsOperationNames.Import);
 
         Directory.CreateDirectory(_videoLibraryPath);
         Directory.CreateDirectory(_thumbnailDir);
@@ -212,7 +212,7 @@ public class ImportService : IImportService
         try
         {
             // Record per-file processing timing
-            using var fileTimer = _metricsService.StartTimer("import_file");
+            using var fileTimer = _metricsService.StartTimer(MetricsOperationNames.ImportFile);
 
             ct.ThrowIfCancellationRequested();
 

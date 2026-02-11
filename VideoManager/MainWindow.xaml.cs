@@ -141,19 +141,19 @@ public partial class MainWindow : Window
 
     private async void VideoListControl_BatchDeleteRequested(object sender, RoutedEventArgs e)
     {
-        if (_mainVm.BatchDeleteCommand.CanExecute(null))
-            await _mainVm.BatchDeleteCommand.ExecuteAsync(null);
+        if (_mainVm.BatchOperationVm.BatchDeleteCommand.CanExecute(null))
+            await _mainVm.BatchOperationVm.BatchDeleteCommand.ExecuteAsync(null);
     }
 
     private async void VideoListControl_BatchTagRequested(object sender, RoutedEventArgs e)
     {
-        if (_mainVm.BatchTagCommand.CanExecute(null))
-            await _mainVm.BatchTagCommand.ExecuteAsync(null);
+        if (_mainVm.BatchOperationVm.BatchTagCommand.CanExecute(null))
+            await _mainVm.BatchOperationVm.BatchTagCommand.ExecuteAsync(null);
     }
 
     private async void VideoListControl_BatchCategoryRequested(object sender, RoutedEventArgs e)
     {
-        if (_mainVm.BatchCategoryCommand.CanExecute(null))
-            await _mainVm.BatchCategoryCommand.ExecuteAsync(null);
+        if (_mainVm.BatchOperationVm.BatchCategoryCommand.CanExecute(null))
+            await _mainVm.BatchOperationVm.BatchCategoryCommand.ExecuteAsync(null);
     }
 }

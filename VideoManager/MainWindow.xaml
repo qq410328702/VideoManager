@@ -132,7 +132,7 @@
                                            Margin="0,0,6,0"
                                            FontSize="13"/>
                                 <ComboBox x:Name="SortFieldComboBox"
-                                          SelectedIndex="{Binding CurrentSortField, Converter={StaticResource SortFieldToIndexConverter}}"
+                                          SelectedIndex="{Binding SortVm.CurrentSortField, Converter={StaticResource SortFieldToIndexConverter}}"
                                           Style="{StaticResource MaterialDesignComboBox}"
                                           Foreground="White"
                                           FontSize="13"
@@ -145,13 +145,13 @@
                                     <ComboBoxItem Content="时长"/>
                                     <ComboBoxItem Content="文件大小"/>
                                 </ComboBox>
-                                <Button Command="{Binding ToggleSortDirectionCommand}"
+                                <Button Command="{Binding SortVm.ToggleSortDirectionCommand}"
                                         Style="{StaticResource MaterialDesignIconForegroundButton}"
                                         Foreground="White"
-                                        ToolTip="{Binding CurrentSortDirection, Converter={StaticResource SortDirectionToTooltipConverter}}"
+                                        ToolTip="{Binding SortVm.CurrentSortDirection, Converter={StaticResource SortDirectionToTooltipConverter}}"
                                         Padding="4"
                                         VerticalAlignment="Center">
-                                    <md:PackIcon Kind="{Binding CurrentSortDirection, Converter={StaticResource SortDirectionToIconConverter}}"
+                                    <md:PackIcon Kind="{Binding SortVm.CurrentSortDirection, Converter={StaticResource SortDirectionToIconConverter}}"
                                                  Width="20" Height="20"/>
                                 </Button>
                             </StackPanel>
@@ -159,18 +159,18 @@
                             <!-- Pagination -->
                             <StackPanel Grid.Column="2" Orientation="Horizontal"
                                         VerticalAlignment="Center">
-                                <Button Command="{Binding PreviousPageCommand}"
+                                <Button Command="{Binding PaginationVm.PreviousPageCommand}"
                                         Style="{StaticResource MaterialDesignIconForegroundButton}"
                                         Foreground="White"
                                         ToolTip="上一页"
                                         Padding="4">
                                     <md:PackIcon Kind="ChevronLeft" Width="20" Height="20"/>
                                 </Button>
-                                <TextBlock Text="{Binding PageInfoText}"
+                                <TextBlock Text="{Binding PaginationVm.PageInfoText}"
                                            Foreground="White"
                                            VerticalAlignment="Center"
                                            Margin="8,0"/>
-                                <Button Command="{Binding NextPageCommand}"
+                                <Button Command="{Binding PaginationVm.NextPageCommand}"
                                         Style="{StaticResource MaterialDesignIconForegroundButton}"
                                         Foreground="White"
                                         ToolTip="下一页"

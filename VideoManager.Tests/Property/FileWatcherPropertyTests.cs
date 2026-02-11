@@ -58,7 +58,10 @@ public class FileWatcherPropertyTests
         var dialogServiceMock = new Mock<IDialogService>();
         var serviceProviderMock = new Mock<IServiceProvider>();
 
-        var vm = new MainViewModel(videoListVm, searchVm, categoryVm, fileWatcherMock.Object, options,
+        var vm = new MainViewModel(videoListVm, searchVm, categoryVm,
+            new PaginationViewModel(videoListVm), new SortViewModel(),
+            new BatchOperationViewModel(videoListVm, categoryVm, dialogServiceMock.Object, serviceProviderMock.Object),
+            fileWatcherMock.Object, options,
             navigationServiceMock.Object, dialogServiceMock.Object, serviceProviderMock.Object);
 
         // Pre-populate the Videos collection

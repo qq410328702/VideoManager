@@ -75,7 +75,7 @@ public class FFmpegService : IFFmpegService
             throw new ArgumentException("Output directory cannot be null or empty.", nameof(outputDir));
 
         // Record thumbnail generation timing
-        using var timer = _metricsService?.StartTimer("thumbnail_generation");
+        using var timer = _metricsService?.StartTimer(MetricsOperationNames.ThumbnailGeneration);
 
         Directory.CreateDirectory(outputDir);
 
